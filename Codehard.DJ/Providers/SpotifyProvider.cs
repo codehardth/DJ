@@ -39,7 +39,12 @@ public class SpotifyProvider : IMusicProvider
         var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
 
         return searchResponse.Tracks.Items?
-                   .Select(item => new Music(item.Id, item.Name, new Uri(item.Uri)))
+                   .Select(item => new Music(
+                       item.Id,
+                       item.Name,
+                       item.Artists.Select(a => a.Name).ToArray(),
+                       item.Album.Name,
+                       new Uri(item.Uri)))
                ?? Enumerable.Empty<Music>();
     }
 
@@ -129,29 +134,36 @@ public class SpotifyProvider : IMusicProvider
 
     private async void GetPlayingTrackInfoAsync(object? state)
     {
-        var playingContext = await this._client.Player.GetCurrentPlayback();
-
-        if (playingContext == null!)
+        try
         {
-            if (this._queue.Any())
+            var playingContext = await this._client.Player.GetCurrentPlayback();
+
+            if (playingContext == null!)
+            {
+                if (this._queue.Any())
+                {
+                    await this.NextAsync();
+                }
+
+                return;
+            }
+
+            if (playingContext.Item is not FullTrack currentTrack)
+            {
+                return;
+            }
+
+            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
+            var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0 && this._queue.Any();
+
+            if (trackEnded || trackStopped)
             {
                 await this.NextAsync();
             }
-
-            return;
         }
-
-        if (playingContext.Item is not FullTrack currentTrack)
+        catch (APIException ex)
         {
-            return;
-        }
-
-        var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
-        var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0 && this._queue.Any();
-
-        if (trackEnded || trackStopped)
-        {
-            await this.NextAsync();
+            this._logger.LogError(ex, "An error occurred during track info gathering");
         }
     }
 
