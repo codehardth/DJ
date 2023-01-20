@@ -133,6 +133,11 @@ public class SpotifyProvider : IMusicProvider
 
         if (playingContext == null!)
         {
+            if (this._queue.Any())
+            {
+                await this.NextAsync();
+            }
+
             return;
         }
 
