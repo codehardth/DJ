@@ -61,7 +61,7 @@ public class DjCommandHandler : BaseCommandModule
         await ReactAsync(ctx, Emojis.ThumbsUp);
     }
 
-    [Command("queue")]
+    [Command("q")]
     public async Task QueueMusicAsync(CommandContext ctx, [RemainingText] string queryText)
     {
         var music = (await this._musicProvider.SearchAsync(queryText)).ToArray();
@@ -78,7 +78,7 @@ public class DjCommandHandler : BaseCommandModule
         }
     }
 
-    [Command("list-queue")]
+    [Command("list-q")]
     public async Task ListQueueAsync(CommandContext ctx)
     {
         await ReactAsync(ctx, Emojis.ThumbsUp);
@@ -104,6 +104,35 @@ public class DjCommandHandler : BaseCommandModule
             Title = "Current music(s) in queue",
             Description = sb.ToString(),
             Color = new Optional<DiscordColor>(DiscordColor.Green),
+        };
+
+        await ctx.RespondAsync(embed);
+    }
+
+    [Command("search")]
+    public async Task SearchAsync(CommandContext ctx, [RemainingText] string queryText)
+    {
+        var searchResult = (await this._musicProvider.SearchAsync(queryText)).ToArray();
+
+        if (!searchResult.Any())
+        {
+            await ctx.RespondAsync("There is music matching your search text.");
+
+            return;
+        }
+
+        var sb = new StringBuilder();
+
+        foreach (var music in searchResult)
+        {
+            sb.AppendLine($"{music.Title} {music.Album} {string.Join(", ", music.Artists)}");
+        }
+
+        var embed = new DiscordEmbedBuilder
+        {
+            Title = $"Search result for {queryText}",
+            Description = sb.ToString(),
+            Color = new Optional<DiscordColor>(DiscordColor.Blue),
         };
 
         await ctx.RespondAsync(embed);
