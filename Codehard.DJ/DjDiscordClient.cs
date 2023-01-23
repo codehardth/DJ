@@ -83,7 +83,7 @@ public class DjCommandHandler : BaseCommandModule
     {
         await ReactAsync(ctx, Emojis.ThumbsUp);
 
-        var queue = (await this._musicProvider.GetCurrentQueueAsync()).ToArray();
+        var queue = (await this._musicProvider.GetCurrentQueueAsync()).Take(10).ToArray();
 
         if (!queue.Any())
         {
@@ -101,7 +101,7 @@ public class DjCommandHandler : BaseCommandModule
 
         var embed = new DiscordEmbedBuilder
         {
-            Title = "Current music(s) in queue",
+            Title = $"Current top {queue.Length} music(s) in queue",
             Description = sb.ToString(),
             Color = new Optional<DiscordColor>(DiscordColor.Green),
         };
