@@ -27,7 +27,7 @@ public class SpotifyProvider : IMusicProvider
         // so we doing the queue in memory
         this._queue = new Queue<Music>();
         this._playedStack = new Stack<Music>();
-        this._timer = new Timer(GetPlayingTrackInfoAsync, default, TimeSpan.Zero, TimeSpan.FromMilliseconds(300));
+        this._timer = new Timer(GetPlayingTrackInfoAsync, default, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 
     public event PlayStartEventHandler? PlayStartEvent;

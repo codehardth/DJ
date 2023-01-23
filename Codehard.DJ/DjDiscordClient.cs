@@ -28,6 +28,15 @@ public class DjDiscordClient : DiscordClientAbstract
     {
         this._logger = logger;
         this._musicProvider = musicProvider;
+
+        this._musicProvider.PlayStartEvent += async (sender, args) =>
+        {
+            await this.Client.UpdateStatusAsync(new DiscordActivity
+            {
+                Name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists)}",
+                ActivityType = ActivityType.ListeningTo,
+            });
+        };
     }
 }
 
@@ -49,7 +58,7 @@ public class DjCommandHandler : BaseCommandModule
     {
         await this._musicProvider.NextAsync();
 
-        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("1F44D"));
+        await ReactAsync(ctx, Emojis.ThumbsUp);
     }
 
     [Command("queue")]

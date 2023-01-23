@@ -5,22 +5,37 @@ namespace Codehard.DJ;
 
 public static class Bootstrap
 {
-    public static async Task<SpotifyClient> InitializeSpotifyClientAsync(string clientId, CancellationToken cancellationToken = default)
+    public static async Task<SpotifyClient> InitializeSpotifyClientAsync(
+        string clientId,
+        string clientSecret,
+        CancellationToken cancellationToken = default)
     {
-        var server = new EmbedIOAuthServer(new Uri("http://localhost:8800/callback"), 8800);
+        var callbackUri = new Uri("http://localhost:8800/callback");
+
+        var server = new EmbedIOAuthServer(callbackUri, 8800);
 
         await server.Start();
 
-        string? accessToken = default;
+        SpotifyClient? client = default;
 
-        server.ImplictGrantReceived += async (sender, response) =>
+        server.AuthorizationCodeReceived += async (sender, response) =>
         {
             var server = (EmbedIOAuthServer)sender;
 
             await server.Stop();
 
-            accessToken = response.AccessToken;
+            var tokenResponse = await new OAuthClient()
+                .RequestToken(
+                    new AuthorizationCodeTokenRequest(clientId, clientSecret, response.Code, callbackUri),
+                    cancellationToken);
+
+            var config = SpotifyClientConfig
+                .CreateDefault()
+                .WithAuthenticator(new AuthorizationCodeAuthenticator("ClientId", "ClientSecret", tokenResponse));
+
+            client = new SpotifyClient(tokenResponse.AccessToken);
         };
+
         server.ErrorReceived += async (sender, error, state) =>
         {
             Console.WriteLine($"Aborting authorization, error received: {error}");
@@ -33,7 +48,7 @@ public static class Bootstrap
         var request = new LoginRequest(
             server.BaseUri,
             clientId,
-            LoginRequest.ResponseType.Token)
+            LoginRequest.ResponseType.Code)
         {
             Scope = new List<string>
             {
@@ -51,9 +66,9 @@ public static class Bootstrap
         {
             try
             {
-                if (!string.IsNullOrWhiteSpace(accessToken))
+                if (client != null)
                 {
-                    return new SpotifyClient(accessToken);
+                    return client;
                 }
 
                 await Task.Delay(300, cancellationToken).ConfigureAwait(false);
