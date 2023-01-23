@@ -2,7 +2,7 @@ name: dotnet core pull request continuous integration
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build:

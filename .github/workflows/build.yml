@@ -1,8 +1,8 @@
-name: merge to master
+name: merge to main
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build_dotnet_core:
