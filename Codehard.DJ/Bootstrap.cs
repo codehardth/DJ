@@ -31,9 +31,9 @@ public static class Bootstrap
 
             var config = SpotifyClientConfig
                 .CreateDefault()
-                .WithAuthenticator(new AuthorizationCodeAuthenticator("ClientId", "ClientSecret", tokenResponse));
+                .WithAuthenticator(new AuthorizationCodeAuthenticator(clientId, clientSecret, tokenResponse));
 
-            client = new SpotifyClient(tokenResponse.AccessToken);
+            client = new SpotifyClient(config);
         };
 
         server.ErrorReceived += async (sender, error, state) =>
