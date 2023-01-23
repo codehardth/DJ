@@ -1,0 +1,37 @@
+name: merge to master
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build_dotnet_core:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 7.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+    - name: Publish ubuntu 20.04 x64
+      run: dotnet publish -c Release -r ubuntu.20.04-x64
+    - name: Publish windows 10 x64
+      run: dotnet publish -c Release -r win10-x64
+    - name: Upload ubuntu build artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: DJ_ubuntu_2004_x64
+        path: /home/runner/work/DJ/DJ/Codehard.DJ/bin/Release/net7.0/ubuntu.20.04-x64/publish/
+    - name: Upload windows build artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: DJ_win10_x64
+        path: /home/runner/work/DJ/DJ/Codehard.DJ/bin/Release/net7.0/win10-x64/publish/
