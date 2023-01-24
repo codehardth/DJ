@@ -31,9 +31,11 @@ public class DjDiscordClient : DiscordClientAbstract
 
         this._musicProvider.PlayStartEvent += async (sender, args) =>
         {
+            var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists)}";
+
             await this.Client.UpdateStatusAsync(new DiscordActivity
             {
-                Name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists)}",
+                Name = name.Length > 128 ? name[..128] : name,
                 ActivityType = ActivityType.ListeningTo,
             });
         };
