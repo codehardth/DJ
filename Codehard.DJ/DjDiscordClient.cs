@@ -41,9 +41,9 @@ public class DjDiscordClient : DiscordClientAbstract
             });
         };
 
-        this._musicProvider.PlayEndEvent += async (_, _) =>
+        this._musicProvider.PlayEndEvent += async (sender, _) =>
         {
-            if (this._musicProvider.RemainingInQueue == 0)
+            if (sender.RemainingInQueue == 0)
             {
                 await this.Client.UpdateStatusAsync(new DiscordActivity
                 {

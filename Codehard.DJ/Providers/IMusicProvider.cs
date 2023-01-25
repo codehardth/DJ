@@ -1,4 +1,5 @@
 ﻿using Codehard.DJ.Providers.Models;
+using Codehard.DJ.Providers.Spotify;
 
 namespace Codehard.DJ.Providers;
 
@@ -20,6 +21,8 @@ public interface IMusicProvider : IDisposable
     Music? Current { get; }
 
     int RemainingInQueue { get; }
+
+    PlaybackState State { get; }
 
     ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default);
 
