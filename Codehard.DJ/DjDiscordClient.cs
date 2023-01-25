@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Runtime.Caching;
+using System.Text;
 using Codehard.DJ.Providers;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
@@ -35,15 +36,30 @@ public class DjDiscordClient : DiscordClientAbstract
 
             await this.Client.UpdateStatusAsync(new DiscordActivity
             {
-                Name = name[..128],
+                Name = name.Length > 128 ? name[..128] : name,
                 ActivityType = ActivityType.ListeningTo,
             });
+        };
+
+        this._musicProvider.PlayEndEvent += async (_, _) =>
+        {
+            if (this._musicProvider.RemainingInQueue == 0)
+            {
+                await this.Client.UpdateStatusAsync(new DiscordActivity
+                {
+                    Name = "Sleeping...",
+                    ActivityType = ActivityType.Custom,
+                });
+            }
         };
     }
 }
 
 public class DjCommandHandler : BaseCommandModule
 {
+    private const string CacheName = "CommandCache";
+
+    private readonly MemoryCache _cache = new(CacheName);
     private readonly IMusicProvider _musicProvider;
     private readonly ILogger<DjCommandHandler> _logger;
 
@@ -56,28 +72,81 @@ public class DjCommandHandler : BaseCommandModule
     }
 
     [Command("skip")]
-    public async Task SkipMusicAsync(CommandContext ctx)
+    public Task SkipMusicAsync(CommandContext ctx)
     {
-        await this._musicProvider.NextAsync();
+        return PerformWithThrottlePolicy(ctx, m => $"skip-{m.Id}", async (context, member) =>
+        {
+            if (!IsCurrentSongOwner(member))
+            {
+                await ReactAsync(context, Emojis.ThumbsDown);
+                await context.RespondAsync("Please respect others rights!");
 
-        await ReactAsync(ctx, Emojis.ThumbsUp);
+                return;
+            }
+
+            await this._musicProvider.NextAsync();
+
+            await ReactAsync(context, Emojis.ThumbsUp);
+        });
     }
 
     [Command("q")]
-    public async Task QueueMusicAsync(CommandContext ctx, [RemainingText] string queryText)
+    public Task QueueMusicAsync(CommandContext ctx, [RemainingText] string queryText)
     {
-        var music = (await this._musicProvider.SearchAsync(queryText)).ToArray();
-
-        if (music.Any())
+        return PerformWithThrottlePolicy(ctx, m => $"queue-{m.Id}", async (context, member) =>
         {
-            await this._musicProvider.EnqueueAsync(music.First());
+            var musics = (await this._musicProvider.SearchAsync(queryText)).ToArray();
 
-            await ReactAsync(ctx, Emojis.ThumbsUp);
-        }
-        else
-        {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
-        }
+            if (musics.Any())
+            {
+                var music = musics.First();
+
+                this._cache.Add(
+                    music.RandomIdentifier.ToString(),
+                    member.Id,
+                    DateTimeOffset.UtcNow.AddMinutes(5));
+
+                await this._musicProvider.EnqueueAsync(music);
+
+                await ReactAsync(context, Emojis.ThumbsUp);
+
+                var queue = await this._musicProvider.GetCurrentQueueAsync();
+
+                var prevs = queue.TakeLast(3).ToArray();
+
+                if (!prevs.Any())
+                {
+                    return;
+                }
+
+                var totalInQueue = this._musicProvider.RemainingInQueue;
+
+                if (totalInQueue > 1)
+                {
+                    await context.RespondAsync($"{totalInQueue - 1} music(s) ahead in queue");
+                }
+
+                var sb = new StringBuilder();
+
+                foreach (var m in prevs)
+                {
+                    sb.AppendLine($"- {m.Title} {m.Album} {string.Join(", ", m.Artists)}");
+                }
+
+                var embed = new DiscordEmbedBuilder
+                {
+                    Title = $"The last {prevs.Length} music(s) in queue are",
+                    Description = sb.ToString(),
+                    Color = new Optional<DiscordColor>(DiscordColor.Blue),
+                };
+
+                await ctx.RespondAsync(embed);
+            }
+            else
+            {
+                await ReactAsync(context, Emojis.ThumbsDown);
+            }
+        });
     }
 
     [Command("list-q")]
@@ -140,8 +209,74 @@ public class DjCommandHandler : BaseCommandModule
         await ctx.RespondAsync(embed);
     }
 
+    private async Task PerformWithThrottlePolicy(
+        CommandContext context,
+        Func<DiscordMember, string> keyFunc,
+        Func<CommandContext, DiscordMember, Task> func)
+    {
+        if (!TryGetMember(context, out var member))
+        {
+            await ReactAsync(context, Emojis.ThumbsDown);
+
+            return;
+        }
+
+        var key = keyFunc(member);
+
+        if (this.TryGetCache(key, out DateTimeOffset expirationDateTimeOffset))
+        {
+            await ReactAsync(context, Emojis.ThumbsDown);
+
+            await context.RespondAsync(
+                $"You're being throttle, " +
+                $"please try again in {(int)expirationDateTimeOffset.Subtract(DateTimeOffset.UtcNow).TotalSeconds} second(s).");
+
+            return;
+        }
+
+        var expireTime = DateTimeOffset.UtcNow.AddMinutes(3);
+
+        await func(context, member);
+
+        this._cache.Add(key, expireTime, new CacheItemPolicy
+        {
+            AbsoluteExpiration = expireTime,
+        });
+    }
+
+    private bool IsCurrentSongOwner(DiscordMember member)
+    {
+        var current = this._musicProvider.Current;
+
+        if (current == null || !TryGetCache(current.RandomIdentifier.ToString(), out ulong memberId))
+        {
+            return false;
+        }
+
+        return member.Id == memberId;
+    }
+
+    private bool TryGetCache<T>(string key, out T value)
+    {
+        if (!this._cache.Contains(key))
+        {
+            value = default!;
+
+            return false;
+        }
+
+        value = (T)this._cache[key];
+
+        return true;
+    }
+
     private static Task ReactAsync(CommandContext ctx, string emojiName)
     {
         return ctx.Message.CreateReactionAsync(DiscordEmoji.FromName(ctx.Client, emojiName));
+    }
+
+    private static bool TryGetMember(CommandContext context, out DiscordMember member)
+    {
+        return (member = context.Member!) != null;
     }
 }

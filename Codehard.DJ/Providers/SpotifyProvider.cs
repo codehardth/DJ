@@ -34,6 +34,10 @@ public class SpotifyProvider : IMusicProvider
 
     public event PlayEndEventHandler? PlayEndEvent;
 
+    public Music? Current => this._currentMusic;
+
+    public int RemainingInQueue => this._queue.Count;
+
     public async ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default)
     {
         var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
@@ -89,16 +93,6 @@ public class SpotifyProvider : IMusicProvider
                 Uris = new[] { music.PlaySourceUri!.AbsoluteUri },
                 DeviceId = device.Id,
             }, cancellationToken);
-
-        if (this._currentMusic != null)
-        {
-            this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
-            {
-                Music = this._currentMusic!,
-            });
-
-            this._playedStack.Push(this._currentMusic);
-        }
 
         this._currentMusic = music;
 
@@ -158,6 +152,16 @@ public class SpotifyProvider : IMusicProvider
 
             if (trackEnded || trackStopped)
             {
+                if (this._currentMusic != null)
+                {
+                    this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                    {
+                        Music = this._currentMusic!,
+                    });
+
+                    this._playedStack.Push(this._currentMusic);
+                }
+
                 await this.NextAsync();
             }
         }
