@@ -29,7 +29,7 @@ builder.ConfigureServices((context, services) =>
 
     var clientId = spotifyConfig["ClientId"];
     var clientSecret = spotifyConfig["ClientSecret"];
-    var cancelToken = new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token;
+    var cancelToken = new CancellationTokenSource().Token;
 
     var spotifyClient = Bootstrap.InitializeSpotifyClientAsync(clientId!, clientSecret!, cancelToken).Result;
 
