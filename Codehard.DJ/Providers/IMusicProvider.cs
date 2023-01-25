@@ -7,15 +7,19 @@ public sealed class MusicPlayerEventArgs : EventArgs
     public Music Music { get; init; }
 }
 
-public delegate void PlayStartEventHandler(object sender, MusicPlayerEventArgs args);
+public delegate void PlayStartEventHandler(IMusicProvider sender, MusicPlayerEventArgs args);
 
-public delegate void PlayEndEventHandler(object sender, MusicPlayerEventArgs args);
+public delegate void PlayEndEventHandler(IMusicProvider sender, MusicPlayerEventArgs args);
 
 public interface IMusicProvider : IDisposable
 {
     event PlayStartEventHandler PlayStartEvent;
 
     event PlayEndEventHandler PlayEndEvent;
+
+    Music? Current { get; }
+
+    int RemainingInQueue { get; }
 
     ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default);
 
