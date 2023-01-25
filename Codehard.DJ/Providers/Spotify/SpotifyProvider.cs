@@ -38,6 +38,8 @@ public class SpotifyProvider : IMusicProvider
 
     public int RemainingInQueue => this._queue.Count;
 
+    public PlaybackState State { get; private set; }
+
     public async ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default)
     {
         var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
@@ -132,6 +134,8 @@ public class SpotifyProvider : IMusicProvider
         {
             var playbackState = await IsCurrentPlaybackEndedAsync();
 
+            this.State = playbackState;
+
             switch (playbackState)
             {
                 case PlaybackState.Playing:
@@ -140,12 +144,12 @@ public class SpotifyProvider : IMusicProvider
                 case PlaybackState.Stopped:
                     if (this._currentMusic != null)
                     {
+                        this._playedStack.Push(this._currentMusic);
+
                         this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
                         {
                             Music = this._currentMusic!,
                         });
-
-                        this._playedStack.Push(this._currentMusic);
 
                         this._currentMusic = null;
                     }
@@ -158,16 +162,6 @@ public class SpotifyProvider : IMusicProvider
                     break;
                 default:
                     throw new NotSupportedException();
-            }
-
-            if (this._currentMusic != null)
-            {
-                this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
-                {
-                    Music = this._currentMusic!,
-                });
-
-                this._playedStack.Push(this._currentMusic);
             }
         }
         catch (APIException ex)
