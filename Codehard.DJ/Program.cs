@@ -2,6 +2,7 @@
 
 using Codehard.DJ;
 using Codehard.DJ.Providers;
+using Codehard.DJ.Providers.Spotify;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

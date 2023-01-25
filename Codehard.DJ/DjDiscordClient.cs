@@ -47,8 +47,8 @@ public class DjDiscordClient : DiscordClientAbstract
             {
                 await this.Client.UpdateStatusAsync(new DiscordActivity
                 {
-                    Name = "Sleeping...",
-                    ActivityType = ActivityType.Custom,
+                    Name = "the empty queue",
+                    ActivityType = ActivityType.Watching,
                 });
             }
         };
