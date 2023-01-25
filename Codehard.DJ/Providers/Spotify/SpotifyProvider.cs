@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using SpotifyAPI.Web;
 
-namespace Codehard.DJ.Providers;
+namespace Codehard.DJ.Providers.Spotify;
 
 public class SpotifyProvider : IMusicProvider
 {
@@ -130,44 +130,72 @@ public class SpotifyProvider : IMusicProvider
     {
         try
         {
-            var playingContext = await this._client.Player.GetCurrentPlayback();
+            var playbackState = await IsCurrentPlaybackEndedAsync();
 
-            if (playingContext == null!)
+            switch (playbackState)
             {
-                if (this._queue.Any())
-                {
-                    await this.NextAsync();
-                }
-
-                return;
-            }
-
-            if (playingContext.Item is not FullTrack currentTrack)
-            {
-                return;
-            }
-
-            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
-            var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0 && this._queue.Any();
-
-            if (trackEnded || trackStopped)
-            {
-                if (this._currentMusic != null)
-                {
-                    this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                case PlaybackState.Playing:
+                    return;
+                case PlaybackState.Ended:
+                case PlaybackState.Stopped:
+                    if (this._currentMusic != null)
                     {
-                        Music = this._currentMusic!,
-                    });
+                        this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                        {
+                            Music = this._currentMusic!,
+                        });
 
-                    this._playedStack.Push(this._currentMusic);
-                }
+                        this._playedStack.Push(this._currentMusic);
 
-                await this.NextAsync();
+                        this._currentMusic = null;
+                    }
+
+                    if (this._queue.Any())
+                    {
+                        await this.NextAsync();
+                    }
+
+                    break;
+                default:
+                    throw new NotSupportedException();
+            }
+
+            if (this._currentMusic != null)
+            {
+                this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                {
+                    Music = this._currentMusic!,
+                });
+
+                this._playedStack.Push(this._currentMusic);
             }
         }
         catch (APIException ex)
         {
             this._logger.LogError(ex, "An error occurred during track info gathering");
+        }
+
+        async Task<PlaybackState> IsCurrentPlaybackEndedAsync()
+        {
+            var playingContext = await this._client.Player.GetCurrentPlayback();
+
+            if (playingContext == null!)
+            {
+                return PlaybackState.Stopped;
+            }
+
+            if (playingContext.Item is not FullTrack currentTrack)
+            {
+                return PlaybackState.Stopped;
+            }
+
+            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
+            var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0;
+
+            return
+                trackEnded ? PlaybackState.Ended :
+                trackStopped ? PlaybackState.Stopped :
+                PlaybackState.Playing;
         }
     }
 
