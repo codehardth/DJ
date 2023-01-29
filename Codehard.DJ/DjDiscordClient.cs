@@ -9,6 +9,7 @@ using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
 using Infrastructure.Discord;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Codehard.DJ;
@@ -100,15 +101,21 @@ public class DjCommandHandler : BaseCommandModule
     private readonly IMemberRepository _memberRepository;
     private readonly IMusicProvider _musicProvider;
     private readonly ILogger<DjCommandHandler> _logger;
+    private readonly int _cooldown;
 
     public DjCommandHandler(
         IMemberRepository memberRepository,
         IMusicProvider musicProvider,
+        IConfiguration configuration,
         ILogger<DjCommandHandler> logger)
     {
-        _memberRepository = memberRepository;
+        this._memberRepository = memberRepository;
         this._musicProvider = musicProvider;
         this._logger = logger;
+        this._cooldown =
+            configuration.GetSection("Configurations")
+                .GetSection("Discord")
+                .GetValue<int>("CommandCooldown");
 
         this._musicProvider.PlayEndEvent += (sender, args) =>
         {
@@ -301,7 +308,7 @@ public class DjCommandHandler : BaseCommandModule
             return;
         }
 
-        var expireTime = DateTimeOffset.UtcNow.AddSeconds(3);
+        var expireTime = DateTimeOffset.UtcNow.AddSeconds(this._cooldown);
 
         await func(context, member);
 
