@@ -1,9 +1,13 @@
 ﻿using System.Runtime.Caching;
 using System.Text;
 using Codehard.DJ.Providers;
+using DJ.Domain.Entities;
+using DJ.Domain.Interfaces;
+using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
 using Infrastructure.Discord;
 using Microsoft.Extensions.Logging;
 
@@ -11,12 +15,14 @@ namespace Codehard.DJ;
 
 public class DjDiscordClient : DiscordClientAbstract
 {
+    private readonly IMemberRepository _memberRepository;
     private readonly ILogger<DjDiscordClient> _logger;
     private readonly IMusicProvider _musicProvider;
 
     public DjDiscordClient(
         string token,
         IServiceProvider serviceProvider,
+        IMemberRepository memberRepository,
         ILogger<DjDiscordClient> logger,
         IMusicProvider musicProvider)
         : base(
@@ -27,12 +33,13 @@ public class DjDiscordClient : DiscordClientAbstract
             true,
             serviceProvider)
     {
+        _memberRepository = memberRepository;
         this._logger = logger;
         this._musicProvider = musicProvider;
 
         this._musicProvider.PlayStartEvent += async (sender, args) =>
         {
-            var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists)}";
+            var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
 
             await this.Client.UpdateStatusAsync(new DiscordActivity
             {
@@ -52,6 +59,36 @@ public class DjDiscordClient : DiscordClientAbstract
                 });
             }
         };
+
+        this.Client.GuildDownloadCompleted += GuildDownloadedHandler;
+        this.Client.GuildMemberAdded += GuildMemberAdded;
+    }
+
+    private async Task GuildMemberAdded(DiscordClient sender, GuildMemberAddEventArgs e)
+    {
+        var guildMember = e.Member;
+
+        var exist = await this._memberRepository.AnyAsync(m => m.Id == guildMember.Id);
+
+        if (!exist)
+        {
+            var member = Member.Create(guildMember.Id, guildMember.Guild.Id);
+
+            await this._memberRepository.AddAsync(member);
+            await this._memberRepository.SaveChangesAsync();
+        }
+    }
+
+    private async Task GuildDownloadedHandler(DiscordClient sender, GuildDownloadCompletedEventArgs e)
+    {
+        var guilds = e.Guilds.Select(g => g.Value);
+
+        var members =
+            guilds.SelectMany(g =>
+                g.Members.Values.Select(m => Member.Create(m.Id, g.Id)));
+
+        await this._memberRepository.AddNewMembersAsync(members);
+        await this._memberRepository.SaveChangesAsync();
     }
 }
 
@@ -60,13 +97,16 @@ public class DjCommandHandler : BaseCommandModule
     private const string CacheName = "CommandCache";
 
     private readonly MemoryCache _cache = new(CacheName);
+    private readonly IMemberRepository _memberRepository;
     private readonly IMusicProvider _musicProvider;
     private readonly ILogger<DjCommandHandler> _logger;
 
     public DjCommandHandler(
+        IMemberRepository memberRepository,
         IMusicProvider musicProvider,
         ILogger<DjCommandHandler> logger)
     {
+        _memberRepository = memberRepository;
         this._musicProvider = musicProvider;
         this._logger = logger;
 
@@ -82,7 +122,9 @@ public class DjCommandHandler : BaseCommandModule
     [Command("skip")]
     public async Task SkipMusicAsync(CommandContext ctx)
     {
-        if (!TryGetMember(ctx, out var member))
+        var member = await GetMemberAsync(ctx);
+
+        if (member == null)
         {
             await ReactAsync(ctx, Emojis.ThumbsDown);
 
@@ -109,55 +151,66 @@ public class DjCommandHandler : BaseCommandModule
         {
             var musics = (await this._musicProvider.SearchAsync(queryText)).ToArray();
 
-            if (musics.Any())
-            {
-                var music = musics.First();
-
-                this._cache.Add(
-                    music.RandomIdentifier.ToString(),
-                    member.Id,
-                    DateTimeOffset.UtcNow.AddHours(3));
-
-                await this._musicProvider.EnqueueAsync(music);
-
-                await ReactAsync(context, Emojis.ThumbsUp);
-
-                var queue = await this._musicProvider.GetCurrentQueueAsync();
-
-                var prevs = queue.TakeLast(3).ToArray();
-
-                if (!prevs.Any())
-                {
-                    return;
-                }
-
-                var totalInQueue = this._musicProvider.RemainingInQueue;
-
-                if (totalInQueue > 1)
-                {
-                    await context.RespondAsync($"{totalInQueue - 1} music(s) ahead in queue");
-                }
-
-                var sb = new StringBuilder();
-
-                foreach (var m in prevs)
-                {
-                    sb.AppendLine($"- {m.Title} {m.Album} {string.Join(", ", m.Artists)}");
-                }
-
-                var embed = new DiscordEmbedBuilder
-                {
-                    Title = $"The last {prevs.Length} music(s) in queue are",
-                    Description = sb.ToString(),
-                    Color = new Optional<DiscordColor>(DiscordColor.Blue),
-                };
-
-                await ctx.RespondAsync(embed);
-            }
-            else
+            if (!musics.Any())
             {
                 await ReactAsync(context, Emojis.ThumbsDown);
+
+                return;
             }
+
+            var music = musics.First();
+
+            this._cache.Add(
+                music.RandomIdentifier.ToString(),
+                member.Id,
+                DateTimeOffset.UtcNow.AddHours(3));
+
+            await this._musicProvider.EnqueueAsync(music);
+
+            await ReactAsync(context, Emojis.ThumbsUp);
+
+            member.AddTrack(
+                music.Id,
+                music.Title,
+                music.Artists.Select(a => a.Name),
+                music.Album,
+                music.PlaySourceUri,
+                music.Artists.SelectMany(a => a.Genres));
+
+            await this._memberRepository.UpdateAsync(member);
+            await this._memberRepository.SaveChangesAsync();
+
+            var queue = await this._musicProvider.GetCurrentQueueAsync();
+
+            var prevs = queue.TakeLast(3).ToArray();
+
+            if (!prevs.Any())
+            {
+                return;
+            }
+
+            var totalInQueue = this._musicProvider.RemainingInQueue;
+
+            if (totalInQueue > 1)
+            {
+                await context.RespondAsync($"{totalInQueue - 1} music(s) ahead in queue");
+            }
+
+            var sb = new StringBuilder();
+
+            foreach (var m in prevs)
+            {
+                sb.AppendLine($"- {m.Title} {m.Album} {string.Join(", ", m.Artists.Select(a => a.Name))}");
+            }
+
+            var embed = new DiscordEmbedBuilder
+            {
+                Title = $"The last {prevs.Length} music(s) in queue are",
+                Description = sb.ToString(),
+                Color = new Optional<DiscordColor>(DiscordColor.Blue),
+            };
+
+            await ctx.RespondAsync(embed);
         });
     }
 
@@ -208,7 +261,7 @@ public class DjCommandHandler : BaseCommandModule
 
         foreach (var music in searchResult)
         {
-            sb.AppendLine($"{music.Title} {music.Album} {string.Join(", ", music.Artists)}");
+            sb.AppendLine($"{music.Title} {music.Album} {string.Join(", ", music.Artists.Select(a => a.Name))}");
         }
 
         var embed = new DiscordEmbedBuilder
@@ -223,10 +276,12 @@ public class DjCommandHandler : BaseCommandModule
 
     private async Task PerformWithThrottlePolicy(
         CommandContext context,
-        Func<DiscordMember, string> keyFunc,
-        Func<CommandContext, DiscordMember, Task> func)
+        Func<Member, string> keyFunc,
+        Func<CommandContext, Member, Task> func)
     {
-        if (!TryGetMember(context, out var member))
+        var member = await GetMemberAsync(context);
+
+        if (member == null)
         {
             await ReactAsync(context, Emojis.ThumbsDown);
 
@@ -256,7 +311,7 @@ public class DjCommandHandler : BaseCommandModule
         });
     }
 
-    private bool IsCurrentSongOwner(DiscordMember member)
+    private bool IsCurrentSongOwner(Member member)
     {
         var current = this._musicProvider.Current;
 
@@ -287,8 +342,17 @@ public class DjCommandHandler : BaseCommandModule
         return ctx.Message.CreateReactionAsync(DiscordEmoji.FromName(ctx.Client, emojiName));
     }
 
-    private static bool TryGetMember(CommandContext context, out DiscordMember member)
+    private async Task<Member?> GetMemberAsync(CommandContext context)
     {
-        return (member = context.Member!) != null;
+        var discordMember = context.Member;
+
+        if (discordMember == null)
+        {
+            return null;
+        }
+
+        var member = await this._memberRepository.GetByIdAsync(discordMember.Id);
+
+        return member;
     }
 }

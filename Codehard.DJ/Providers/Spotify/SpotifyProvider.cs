@@ -48,8 +48,15 @@ public class SpotifyProvider : IMusicProvider
                    .Select(item => new Music(
                        item.Id,
                        item.Name,
-                       item.Artists.Select(a => a.Name).ToArray(),
+                       item.Artists.Join(
+                               searchResponse.Artists.Items!,
+                               l => l.Id,
+                               r => r.Id,
+                               (_, r) => r)
+                           .Select(fa => new Artist(fa.Id, fa.Name, fa.Genres))
+                           .ToArray(),
                        item.Album.Name,
+                       string.Empty,
                        new Uri(item.Uri)))
                ?? Enumerable.Empty<Music>();
     }
