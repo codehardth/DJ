@@ -69,25 +69,37 @@ public class DjCommandHandler : BaseCommandModule
     {
         this._musicProvider = musicProvider;
         this._logger = logger;
+
+        this._musicProvider.PlayEndEvent += (sender, args) =>
+        {
+            var key = args.Music.RandomIdentifier.ToString();
+
+            if (this._cache.Contains(key))
+                this._cache.Remove(key);
+        };
     }
 
     [Command("skip")]
-    public Task SkipMusicAsync(CommandContext ctx)
+    public async Task SkipMusicAsync(CommandContext ctx)
     {
-        return PerformWithThrottlePolicy(ctx, m => $"skip-{m.Id}", async (context, member) =>
+        if (!TryGetMember(ctx, out var member))
         {
-            if (!IsCurrentSongOwner(member))
-            {
-                await ReactAsync(context, Emojis.ThumbsDown);
-                await context.RespondAsync("Please respect others rights!");
+            await ReactAsync(ctx, Emojis.ThumbsDown);
 
-                return;
-            }
+            return;
+        }
 
-            await this._musicProvider.NextAsync();
+        if (!IsCurrentSongOwner(member))
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ctx.RespondAsync("Please respect others rights!");
 
-            await ReactAsync(context, Emojis.ThumbsUp);
-        });
+            return;
+        }
+
+        await this._musicProvider.NextAsync();
+
+        await ReactAsync(ctx, Emojis.ThumbsUp);
     }
 
     [Command("q")]
@@ -104,7 +116,7 @@ public class DjCommandHandler : BaseCommandModule
                 this._cache.Add(
                     music.RandomIdentifier.ToString(),
                     member.Id,
-                    DateTimeOffset.UtcNow.AddMinutes(5));
+                    DateTimeOffset.UtcNow.AddHours(3));
 
                 await this._musicProvider.EnqueueAsync(music);
 
@@ -225,10 +237,10 @@ public class DjCommandHandler : BaseCommandModule
 
         if (this.TryGetCache(key, out DateTimeOffset expirationDateTimeOffset))
         {
-            await ReactAsync(context, Emojis.ThumbsDown);
+            await ReactAsync(context, Emojis.NoEntry);
 
             await context.RespondAsync(
-                $"You're being throttle, " +
+                $"You're being throttled, " +
                 $"please try again in {(int)expirationDateTimeOffset.Subtract(DateTimeOffset.UtcNow).TotalSeconds} second(s).");
 
             return;
