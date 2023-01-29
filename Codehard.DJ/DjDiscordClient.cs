@@ -138,6 +138,14 @@ public class DjCommandHandler : BaseCommandModule
             return;
         }
 
+        if (this._musicProvider.Current == null)
+        {
+            await ReactAsync(ctx, Emojis.NoEntry);
+            await ctx.RespondAsync("Current track is not tracking by the bot.");
+
+            return;
+        }
+
         if (!IsCurrentSongOwner(member))
         {
             await ReactAsync(ctx, Emojis.ThumbsDown);
@@ -276,6 +284,53 @@ public class DjCommandHandler : BaseCommandModule
             Title = $"Search result for {queryText}",
             Description = sb.ToString(),
             Color = new Optional<DiscordColor>(DiscordColor.Blue),
+        };
+
+        await ctx.RespondAsync(embed);
+    }
+
+    [Command("stat")]
+    public async Task GetStatAsync(CommandContext ctx)
+    {
+        var member = await GetMemberAsync(ctx);
+
+        if (member == null)
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+
+            return;
+        }
+
+        var playedTracks = member.PlayedTracks;
+
+        if (!playedTracks.Any())
+        {
+            await ctx.RespondAsync("There is no history so far, try queueing one!");
+
+            return;
+        }
+
+        var mostPlayedGenre =
+            playedTracks.SelectMany(t => t.Genres).GroupBy(g => g).MaxBy(g => g.Count())?.Key;
+        var mostPlayedArtist =
+            playedTracks.SelectMany(t => t.Artists).GroupBy(a => a).MaxBy(g => g.Count())?.Key;
+        var totalPlayedTracks = playedTracks.Count;
+        var averagePlayedPerDay =
+            playedTracks.GroupBy(t => new { t.CreatedAt.Day, t.CreatedAt.Month, t.CreatedAt.Year })
+                .MaxBy(d => d.Count())?
+                .Count() ?? 0;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"🎵 Most played genre: {mostPlayedGenre ?? "Unknown"}");
+        sb.AppendLine($"🎵 Most played artist: {mostPlayedArtist ?? "Unknown"}");
+        sb.AppendLine($"🎵 Total requested tracks: {totalPlayedTracks}");
+        sb.AppendLine($"🎵 Average requested track per day: {averagePlayedPerDay}");
+
+        var embed = new DiscordEmbedBuilder
+        {
+            Title = "Here's some insight for you",
+            Description = sb.ToString(),
+            Color = new Optional<DiscordColor>(DiscordColor.Purple),
         };
 
         await ctx.RespondAsync(embed);
