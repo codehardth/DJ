@@ -44,12 +44,16 @@ public class SpotifyProvider : IMusicProvider
     {
         var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
 
+        var artistIds = searchResponse.Tracks.Items!.SelectMany(t => t.Artists.Select(a => a.Id));
+
+        var artistsResponse = await this._client.Artists.GetSeveral(new ArtistsRequest(artistIds.ToList()), cancellationToken);
+
         return searchResponse.Tracks.Items?
                    .Select(item => new Music(
                        item.Id,
                        item.Name,
                        item.Artists.Join(
-                               searchResponse.Artists.Items!,
+                               artistsResponse.Artists,
                                l => l.Id,
                                r => r.Id,
                                (_, r) => r)

@@ -301,7 +301,7 @@ public class DjCommandHandler : BaseCommandModule
             return;
         }
 
-        var expireTime = DateTimeOffset.UtcNow.AddMinutes(3);
+        var expireTime = DateTimeOffset.UtcNow.AddSeconds(3);
 
         await func(context, member);
 
