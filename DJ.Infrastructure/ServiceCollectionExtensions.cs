@@ -10,7 +10,9 @@ public static class ServiceCollectionExtensions
 {
     public static void AddDjDbContext(this IServiceCollection services, string connectionString)
     {
-        services.AddDbContext<DjDbContext>(options => options.UseSqlite(connectionString));
+        services.AddDbContext<DjDbContext>(options =>
+            options.UseSqlite(connectionString)
+                .UseLazyLoadingProxies());
     }
 
     public static void AddRepositories(this IServiceCollection services)
