@@ -3,6 +3,8 @@
 using Codehard.DJ;
 using Codehard.DJ.Providers;
 using Codehard.DJ.Providers.Spotify;
+using DJ.Domain.Interfaces;
+using DJ.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -46,15 +48,21 @@ builder.ConfigureServices((context, services) =>
             new DjDiscordClient(
                 discordConfig["Token"]!,
                 sp,
+                sp.GetRequiredService<IMemberRepository>(),
                 sp.GetRequiredService<ILogger<DjDiscordClient>>(),
                 sp.GetRequiredService<IMusicProvider>()));
 
         services.AddHostedService<DiscordBotHostingService>();
     }
+
+    services.AddDjDbContext(configuration.GetConnectionString("DjDatabase")!);
+    services.AddRepositories();
 });
 
 builder.UseConsoleLifetime();
 
 var app = builder.Build();
+
+await app.ApplyMigrationsAsync<DjDbContext>();
 
 await app.RunAsync();

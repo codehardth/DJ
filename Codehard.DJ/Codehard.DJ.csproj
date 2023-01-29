@@ -22,6 +22,8 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\DJ.Domain\DJ.Domain.csproj" />
+      <ProjectReference Include="..\DJ.Infrastructure\DJ.Infrastructure.csproj" />
       <ProjectReference Include="..\Infrastructure.Discord\Infrastructure.Discord.csproj" />
     </ItemGroup>
 

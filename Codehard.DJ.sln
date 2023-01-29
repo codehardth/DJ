@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Codehard.DJ", "Codehard.DJ\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure.Discord", "Infrastructure.Discord\Infrastructure.Discord.csproj", "{1EDF35FF-A84C-4C62-9365-6B6AF8BD0607}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DJ.Domain", "DJ.Domain\DJ.Domain.csproj", "{42301BDB-63DB-4F18-A542-3EDB3CDB8FCB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DJ.Infrastructure", "DJ.Infrastructure\DJ.Infrastructure.csproj", "{0A1D4F4D-DEFA-450D-8AB5-7D37C52D86A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{1EDF35FF-A84C-4C62-9365-6B6AF8BD0607}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1EDF35FF-A84C-4C62-9365-6B6AF8BD0607}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1EDF35FF-A84C-4C62-9365-6B6AF8BD0607}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42301BDB-63DB-4F18-A542-3EDB3CDB8FCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42301BDB-63DB-4F18-A542-3EDB3CDB8FCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42301BDB-63DB-4F18-A542-3EDB3CDB8FCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42301BDB-63DB-4F18-A542-3EDB3CDB8FCB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A1D4F4D-DEFA-450D-8AB5-7D37C52D86A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A1D4F4D-DEFA-450D-8AB5-7D37C52D86A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A1D4F4D-DEFA-450D-8AB5-7D37C52D86A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A1D4F4D-DEFA-450D-8AB5-7D37C52D86A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
