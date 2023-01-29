@@ -48,21 +48,24 @@ public class SpotifyProvider : IMusicProvider
 
         var artistsResponse = await this._client.Artists.GetSeveral(new ArtistsRequest(artistIds.ToList()), cancellationToken);
 
-        return searchResponse.Tracks.Items?
-                   .Select(item => new Music(
-                       item.Id,
-                       item.Name,
-                       item.Artists.Join(
-                               artistsResponse.Artists,
-                               l => l.Id,
-                               r => r.Id,
-                               (_, r) => r)
-                           .Select(fa => new Artist(fa.Id, fa.Name, fa.Genres))
-                           .ToArray(),
-                       item.Album.Name,
-                       string.Empty,
-                       new Uri(item.Uri)))
-               ?? Enumerable.Empty<Music>();
+        var res = searchResponse.Tracks.Items?
+                      .Select(item => new Music(
+                          item.Id,
+                          item.Name,
+                          item.Artists
+                              .Join(
+                                  artistsResponse.Artists.DistinctBy(a => a.Id),
+                                  l => l.Id,
+                                  r => r.Id,
+                                  (_, r) => r)
+                              .Select(fa => new Artist(fa.Id, fa.Name, fa.Genres))
+                              .ToArray(),
+                          item.Album.Name,
+                          string.Empty,
+                          new Uri(item.Uri)))
+                  ?? Enumerable.Empty<Music>();
+
+        return res;
     }
 
     public ValueTask<IEnumerable<Music>> GetCurrentQueueAsync(CancellationToken cancellationToken = default)
