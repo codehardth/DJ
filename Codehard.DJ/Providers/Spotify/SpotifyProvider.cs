@@ -40,9 +40,9 @@ public class SpotifyProvider : IMusicProvider
 
     public PlaybackState State { get; private set; }
 
-    public async ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default)
+    public async ValueTask<IEnumerable<Music>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default)
     {
-        var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
+        var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query) { Limit = limit, }, cancellationToken);
 
         var artistIds = searchResponse.Tracks.Items!.SelectMany(t => t.Artists.Select(a => a.Id));
 
