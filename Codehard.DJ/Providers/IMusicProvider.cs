@@ -24,7 +24,7 @@ public interface IMusicProvider : IDisposable
 
     PlaybackState State { get; }
 
-    ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default);
+    ValueTask<IEnumerable<Music>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default);
 
     ValueTask<IEnumerable<Music>> GetCurrentQueueAsync(CancellationToken cancellationToken = default);
 
