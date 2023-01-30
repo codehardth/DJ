@@ -276,7 +276,7 @@ public class DjCommandHandler : BaseCommandModule
 
         foreach (var music in searchResult)
         {
-            sb.AppendLine($"{music.Title} {music.Album} {string.Join(", ", music.Artists.Select(a => a.Name))}");
+            sb.AppendLine($"➡️ {music.Title} {music.Album} {string.Join(", ", music.Artists.Select(a => a.Name))}");
         }
 
         var embed = new DiscordEmbedBuilder
