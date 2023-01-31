@@ -98,9 +98,14 @@ public class DjDiscordClient : DiscordClientAbstract
             return;
         }
 
-        var embedContent = message.Embeds[0].Description;
+        var query = message.Embeds[0].Footer?.Text;
 
-        await SharedChannel<Message>.Writer.WriteAsync(new Message(sender, e.Channel, e.User, embedContent));
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return;
+        }
+
+        await SharedChannel<Message>.Writer.WriteAsync(new Message(sender, e.Channel, e.User, query));
     }
 
     private async Task GuildMemberAdded(DiscordClient sender, GuildMemberAddEventArgs e)
@@ -402,10 +407,16 @@ public partial class DjCommandHandler : BaseCommandModule
 
         foreach (var music in searchResult)
         {
+            var artists = string.Join(", ", music.Artists.Select(a => a.Name));
+
             var embed = new DiscordEmbedBuilder
             {
                 Title = $"{queryText} from {ctx.User.Username}",
-                Description = $"{music.Title} {music.Album} {string.Join(", ", music.Artists.Select(a => a.Name))}",
+                Description = $"🎵 {music.Title}\n🧑‍🎤 {artists}\n💿 {music.Album}",
+                Footer = new DiscordEmbedBuilder.EmbedFooter()
+                {
+                    Text = $"{music.Title} {music.Album} {artists}",
+                },
                 Color = new Optional<DiscordColor>(DiscordColor.Blue),
             };
 
