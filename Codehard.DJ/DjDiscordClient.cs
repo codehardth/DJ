@@ -394,6 +394,44 @@ public partial class DjCommandHandler : BaseCommandModule
     }
 
     [Command("search")]
+    public async Task SearchAsync(CommandContext ctx, int pageSize, [RemainingText] string queryText)
+    {
+        if ((pageSize <= 0) || (pageSize > 10))
+        {
+            await ctx.RespondAsync("Page size is between 1 to 10.");
+
+            return;
+        }
+
+        var searchResult = (await this._musicProvider.SearchAsync(queryText, pageSize)).ToArray();
+
+        if (!searchResult.Any())
+        {
+            await ctx.RespondAsync("There is music matching your search text.");
+
+            return;
+        }
+
+        foreach (var music in searchResult)
+        {
+            var artists = string.Join(", ", music.Artists.Select(a => a.Name));
+
+            var embed = new DiscordEmbedBuilder
+            {
+                Title = $"{queryText} from {ctx.User.Username}",
+                Description = $"🎵 {music.Title}\n🧑‍🎤 {artists}\n💿 {music.Album}",
+                Footer = new DiscordEmbedBuilder.EmbedFooter()
+                {
+                    Text = $"{music.Title} {music.Album} {artists}",
+                },
+                Color = new Optional<DiscordColor>(DiscordColor.Blue),
+            };
+
+            await ctx.RespondAsync(embed);
+        }
+    }
+
+    [Command("search")]
     public async Task SearchAsync(CommandContext ctx, [RemainingText] string queryText)
     {
         var searchResult = (await this._musicProvider.SearchAsync(queryText, 3)).ToArray();
