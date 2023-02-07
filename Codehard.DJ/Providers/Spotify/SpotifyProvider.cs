@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using SpotifyAPI.Web;
 
-namespace Codehard.DJ.Providers;
+namespace Codehard.DJ.Providers.Spotify;
 
 public class SpotifyProvider : IMusicProvider
 {
@@ -27,20 +27,45 @@ public class SpotifyProvider : IMusicProvider
         // so we doing the queue in memory
         this._queue = new Queue<Music>();
         this._playedStack = new Stack<Music>();
-        this._timer = new Timer(GetPlayingTrackInfoAsync, default, TimeSpan.Zero, TimeSpan.FromMilliseconds(300));
+        this._timer = new Timer(GetPlayingTrackInfoAsync, default, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 
     public event PlayStartEventHandler? PlayStartEvent;
 
     public event PlayEndEventHandler? PlayEndEvent;
 
-    public async ValueTask<IEnumerable<Music>> SearchAsync(string query, CancellationToken cancellationToken = default)
-    {
-        var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query), cancellationToken);
+    public Music? Current => this._currentMusic;
 
-        return searchResponse.Tracks.Items?
-                   .Select(item => new Music(item.Id, item.Name, new Uri(item.Uri)))
-               ?? Enumerable.Empty<Music>();
+    public int RemainingInQueue => this._queue.Count;
+
+    public PlaybackState State { get; private set; }
+
+    public async ValueTask<IEnumerable<Music>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default)
+    {
+        var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query) { Limit = limit, }, cancellationToken);
+
+        var artistIds = searchResponse.Tracks.Items!.SelectMany(t => t.Artists.Select(a => a.Id));
+
+        var artistsResponse = await this._client.Artists.GetSeveral(new ArtistsRequest(artistIds.ToList()), cancellationToken);
+
+        var res = searchResponse.Tracks.Items?
+                      .Select(item => new Music(
+                          item.Id,
+                          item.Name,
+                          item.Artists
+                              .Join(
+                                  artistsResponse.Artists.DistinctBy(a => a.Id),
+                                  l => l.Id,
+                                  r => r.Id,
+                                  (_, r) => r)
+                              .Select(fa => new Artist(fa.Id, fa.Name, fa.Genres))
+                              .ToArray(),
+                          item.Album.Name,
+                          string.Empty,
+                          new Uri(item.Uri)))
+                  ?? Enumerable.Empty<Music>();
+
+        return res;
     }
 
     public ValueTask<IEnumerable<Music>> GetCurrentQueueAsync(CancellationToken cancellationToken = default)
@@ -85,16 +110,6 @@ public class SpotifyProvider : IMusicProvider
                 DeviceId = device.Id,
             }, cancellationToken);
 
-        if (this._currentMusic != null)
-        {
-            this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
-            {
-                Music = this._currentMusic!,
-            });
-
-            this._playedStack.Push(this._currentMusic);
-        }
-
         this._currentMusic = music;
 
         this.PlayStartEvent?.Invoke(this, new MusicPlayerEventArgs
@@ -129,24 +144,66 @@ public class SpotifyProvider : IMusicProvider
 
     private async void GetPlayingTrackInfoAsync(object? state)
     {
-        var playingContext = await this._client.Player.GetCurrentPlayback();
-
-        if (playingContext == null!)
+        try
         {
-            return;
+            var playbackState = await IsCurrentPlaybackEndedAsync();
+
+            this.State = playbackState;
+
+            switch (playbackState)
+            {
+                case PlaybackState.Playing:
+                    return;
+                case PlaybackState.Ended:
+                case PlaybackState.Stopped:
+                    if (this._currentMusic != null)
+                    {
+                        this._playedStack.Push(this._currentMusic);
+
+                        this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                        {
+                            Music = this._currentMusic!,
+                        });
+
+                        this._currentMusic = null;
+                    }
+
+                    if (this._queue.Any())
+                    {
+                        await this.NextAsync();
+                    }
+
+                    break;
+                default:
+                    throw new NotSupportedException();
+            }
+        }
+        catch (APIException ex)
+        {
+            this._logger.LogError(ex, "An error occurred during track info gathering");
         }
 
-        if (playingContext.Item is not FullTrack currentTrack)
+        async Task<PlaybackState> IsCurrentPlaybackEndedAsync()
         {
-            return;
-        }
+            var playingContext = await this._client.Player.GetCurrentPlayback();
 
-        var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
-        var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0 && this._queue.Any();
+            if (playingContext == null!)
+            {
+                return PlaybackState.Stopped;
+            }
 
-        if (trackEnded || trackStopped)
-        {
-            await this.NextAsync();
+            if (playingContext.Item is not FullTrack currentTrack)
+            {
+                return PlaybackState.Stopped;
+            }
+
+            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
+            var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0;
+
+            return
+                trackEnded ? PlaybackState.Ended :
+                trackStopped ? PlaybackState.Stopped :
+                PlaybackState.Playing;
         }
     }
 

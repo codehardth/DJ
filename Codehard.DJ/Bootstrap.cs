@@ -1,26 +1,44 @@
-﻿using SpotifyAPI.Web;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using SpotifyAPI.Web;
 using SpotifyAPI.Web.Auth;
 
 namespace Codehard.DJ;
 
 public static class Bootstrap
 {
-    public static async Task<SpotifyClient> InitializeSpotifyClientAsync(string clientId, CancellationToken cancellationToken = default)
+    public static async Task<SpotifyClient> InitializeSpotifyClientAsync(
+        string clientId,
+        string clientSecret,
+        CancellationToken cancellationToken = default)
     {
-        var server = new EmbedIOAuthServer(new Uri("http://localhost:8800/callback"), 8800);
+        var callbackUri = new Uri("http://localhost:8800/callback");
+
+        var server = new EmbedIOAuthServer(callbackUri, 8800);
 
         await server.Start();
 
-        string? accessToken = default;
+        SpotifyClient? client = default;
 
-        server.ImplictGrantReceived += async (sender, response) =>
+        server.AuthorizationCodeReceived += async (sender, response) =>
         {
             var server = (EmbedIOAuthServer)sender;
 
             await server.Stop();
 
-            accessToken = response.AccessToken;
+            var tokenResponse = await new OAuthClient()
+                .RequestToken(
+                    new AuthorizationCodeTokenRequest(clientId, clientSecret, response.Code, callbackUri),
+                    cancellationToken);
+
+            var config = SpotifyClientConfig
+                .CreateDefault()
+                .WithAuthenticator(new AuthorizationCodeAuthenticator(clientId, clientSecret, tokenResponse));
+
+            client = new SpotifyClient(config);
         };
+
         server.ErrorReceived += async (sender, error, state) =>
         {
             Console.WriteLine($"Aborting authorization, error received: {error}");
@@ -33,7 +51,7 @@ public static class Bootstrap
         var request = new LoginRequest(
             server.BaseUri,
             clientId,
-            LoginRequest.ResponseType.Token)
+            LoginRequest.ResponseType.Code)
         {
             Scope = new List<string>
             {
@@ -51,9 +69,9 @@ public static class Bootstrap
         {
             try
             {
-                if (!string.IsNullOrWhiteSpace(accessToken))
+                if (client != null)
                 {
-                    return new SpotifyClient(accessToken);
+                    return client;
                 }
 
                 await Task.Delay(300, cancellationToken).ConfigureAwait(false);
@@ -65,5 +83,27 @@ public static class Bootstrap
                 throw;
             }
         }
+    }
+
+    public static async Task ApplyMigrationsAsync<T>(this IHost host, CancellationToken cancellationToken = default)
+        where T : DbContext
+    {
+        using var scope = host.Services.CreateScope();
+
+        await using var dbContext = scope.ServiceProvider.GetService<T>();
+
+        if (dbContext == null)
+        {
+            throw new InvalidOperationException($"Unable to resolve '{typeof(T)}' from host.");
+        }
+
+        var migrations = await dbContext.Database.GetPendingMigrationsAsync(cancellationToken);
+
+        if (migrations.Any())
+        {
+            await dbContext.Database.MigrateAsync(CancellationToken.None);
+        }
+
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 }

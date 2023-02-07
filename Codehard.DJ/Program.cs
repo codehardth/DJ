@@ -2,12 +2,14 @@
 
 using Codehard.DJ;
 using Codehard.DJ.Providers;
+using Codehard.DJ.Providers.Spotify;
+using DJ.Domain.Interfaces;
+using DJ.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using SpotifyAPI.Web;
-using SpotifyAPI.Web.Auth;
+using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateDefaultBuilder(args);
 
@@ -24,21 +26,43 @@ builder.ConfigureServices((context, services) =>
 {
     var configuration = context.Configuration;
 
-    var spotifyConfig =
-        configuration.GetSection("Configurations").GetSection("Spotify");
+    var configSection = configuration.GetSection("Configurations");
+
+    var spotifyConfig = configSection.GetSection("Spotify");
 
     var clientId = spotifyConfig["ClientId"];
+    var clientSecret = spotifyConfig["ClientSecret"];
 
-    var spotifyClient = Bootstrap.InitializeSpotifyClientAsync(clientId!).Result;
+    var spotifyClient = Bootstrap.InitializeSpotifyClientAsync(clientId!, clientSecret!).Result;
 
     services.TryAddSingleton(spotifyClient);
     services.TryAddSingleton<IMusicProvider, SpotifyProvider>();
 
-    services.AddHostedService<TestingHostApp>();
+    var discordConfig = configSection.GetSection("Discord");
+
+    var discordActive = discordConfig.GetValue<bool>("Active");
+
+    if (discordActive)
+    {
+        services.TryAddSingleton(sp =>
+            new DjDiscordClient(
+                discordConfig["Token"]!,
+                sp,
+                sp.GetRequiredService<IMemberRepository>(),
+                sp.GetRequiredService<ILogger<DjDiscordClient>>(),
+                sp.GetRequiredService<IMusicProvider>()));
+
+        services.AddHostedService<DiscordBotHostingService>();
+    }
+
+    services.AddDjDbContext(configuration.GetConnectionString("DjDatabase")!);
+    services.AddRepositories();
 });
 
 builder.UseConsoleLifetime();
 
 var app = builder.Build();
+
+await app.ApplyMigrationsAsync<DjDbContext>();
 
 await app.RunAsync();

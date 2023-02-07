@@ -12,12 +12,19 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.0" />
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="7.0.0" />
         <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.0.0" />
+        <PackageReference Include="System.Runtime.Caching" Version="7.0.0" />
     </ItemGroup>
 
     <ItemGroup>
       <None Update="appsettings.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\DJ.Domain\DJ.Domain.csproj" />
+      <ProjectReference Include="..\DJ.Infrastructure\DJ.Infrastructure.csproj" />
+      <ProjectReference Include="..\Infrastructure.Discord\Infrastructure.Discord.csproj" />
     </ItemGroup>
 
 </Project>
