@@ -2,7 +2,6 @@
 using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
-using DSharpPlus.SlashCommands;
 
 namespace Infrastructure.Discord;
 
@@ -54,11 +53,6 @@ public abstract class DiscordClientAbstract : IAsyncDisposable
         IServiceProvider? serviceProvider = default)
         : this(token)
     {
-        var slashCommands = this.Client.UseSlashCommands(new SlashCommandsConfiguration
-        {
-            Services = serviceProvider,
-        });
-
         var command = this.Client.UseCommandsNext(new CommandsNextConfiguration
         {
             StringPrefixes = commandPrefixes,
@@ -69,14 +63,12 @@ public abstract class DiscordClientAbstract : IAsyncDisposable
 
         foreach (var module in commandModules)
         {
-            if (!module.IsAssignableTo(typeof(BaseCommandModule)) ||
-                !module.IsAssignableTo(typeof(ApplicationCommandModule)))
+            if (!module.IsAssignableTo(typeof(BaseCommandModule)))
             {
                 throw new Exception($"Type {module.FullName} is not a {nameof(BaseCommandModule)}");
             }
 
             command.RegisterCommands(module);
-            slashCommands.RegisterCommands(module);
         }
     }
 

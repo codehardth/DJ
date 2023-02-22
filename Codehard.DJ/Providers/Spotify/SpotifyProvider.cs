@@ -1,4 +1,5 @@
-﻿using Codehard.DJ.Providers.Models;
+﻿using Codehard.DJ.Extensions;
+using Codehard.DJ.Providers.Models;
 using Microsoft.Extensions.Logging;
 using SpotifyAPI.Web;
 
@@ -14,6 +15,7 @@ public class SpotifyProvider : IMusicProvider
 
     private Music? _currentMusic;
     private bool _disposed;
+    private int _volume = -1;
 
     public SpotifyProvider(
         SpotifyClient client,
@@ -33,6 +35,8 @@ public class SpotifyProvider : IMusicProvider
     public event PlayStartEventHandler? PlayStartEvent;
 
     public event PlayEndEventHandler? PlayEndEvent;
+
+    public event PlaybackOutOfSyncHandler? PlaybackOutOfSyncEvent;
 
     public Music? Current => this._currentMusic;
 
@@ -62,6 +66,7 @@ public class SpotifyProvider : IMusicProvider
                               .ToArray(),
                           item.Album.Name,
                           string.Empty,
+                          item.DurationMs,
                           new Uri(item.Uri)))
                   ?? Enumerable.Empty<Music>();
 
@@ -103,12 +108,20 @@ public class SpotifyProvider : IMusicProvider
 
         this._logger.LogInformation("Playing on {DeviceId}-{DeviceName}", device.Id, device.Name);
 
-        await this._client.Player.ResumePlayback(
-            new PlayerResumePlaybackRequest
-            {
-                Uris = new[] { music.PlaySourceUri!.AbsoluteUri },
-                DeviceId = device.Id,
-            }, cancellationToken);
+        try
+        {
+            await this._client.Player.ResumePlayback(
+                new PlayerResumePlaybackRequest
+                {
+                    Uris = new[] { music.PlaySourceUri!.AbsoluteUri },
+                    DeviceId = device.Id,
+                }, cancellationToken);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
 
         this._currentMusic = music;
 
@@ -123,9 +136,14 @@ public class SpotifyProvider : IMusicProvider
         await this._client.Player.PausePlayback(cancellationToken);
     }
 
-    public ValueTask<Music> StopAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<Music?> StopAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException();
+        var pos = this._currentMusic?.Duration ?? int.MaxValue;
+
+        await this._client.Player.PausePlayback(cancellationToken);
+        await this._client.Player.SeekTo(new PlayerSeekToRequest(pos), cancellationToken);
+
+        return this._currentMusic;
     }
 
     public async ValueTask<Music?> NextAsync(CancellationToken cancellationToken = default)
@@ -142,18 +160,149 @@ public class SpotifyProvider : IMusicProvider
         return next;
     }
 
+    public async ValueTask AutoPlayAsync(CancellationToken cancellationToken = default)
+    {
+        var workflow =
+            from response in
+                Aff(async () => await this._client.Search.Item(
+                    new SearchRequest(SearchRequest.Types.Playlist, "Discover Weekly"), cancellationToken))
+            let responsePlaylists = response.Playlists
+            let playlists =
+                responsePlaylists.Items.Filter(p => p.Owner.DisplayName == "Spotify")
+            from itemsNotEmptyGuard in
+                guard(playlists.Any(), Error.New(0, "No item available to play"))
+            from playlistTracks in
+                playlists.SequenceParallel(p =>
+                        this._client.Playlists.GetItems(p.Id, cancellationToken))
+                    .ToAff()
+            from deviceResponse in
+                this._client.Player.GetAvailableDevices(cancellationToken)
+                    .ToAff()
+            from deviceAvailableGuard in
+                guard(deviceResponse.Devices.Any(), Error.New(0, "Unable to find any device to play"))
+            let device = deviceResponse.Devices.FirstOrDefault(d => d.IsActive)
+                         ?? deviceResponse.Devices.First()
+            let tracks =
+                playlistTracks.Bind(t => t.Items)
+                    .Map(t => Optional(t.Track as FullTrack))
+                    .Filter(opt => opt.IsSome)
+                    .Shuffle()
+                    .Take(20)
+            let uris =
+                tracks.Map(opt => opt.Match(t => t.Uri, static () => string.Empty))
+                    .Filter(u => !string.IsNullOrWhiteSpace(u))
+            let first = uris.First()
+            let remaining = uris.Skip(1)
+            from playFirst in
+                this._client.Player.ResumePlayback(new PlayerResumePlaybackRequest
+                    {
+                        Uris = new[] { uris.First() },
+                        DeviceId = device.Id,
+                    }, cancellationToken)
+                    .ToAff()
+            from queueRemaining in
+                remaining
+                    .SequenceParallel(u => this._client.Player.AddToQueue(new PlayerAddToQueueRequest(u), cancellationToken))
+                    .ToAff()
+            select unit;
+
+        var fin = await workflow.Run();
+
+        _ = fin.ThrowIfFail();
+    }
+
+    public async ValueTask<bool> MuteAsync(CancellationToken cancellationToken = default)
+    {
+        var oldVolume = this._volume;
+
+        try
+        {
+            this._volume = this._volume == -1 ? 100 : this._volume;
+
+            var result = await this._client.Player.SetVolume(new PlayerVolumeRequest(0), cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            this._volume = oldVolume;
+
+            return false;
+        }
+    }
+
+    public async ValueTask<bool> UnmuteAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await this._client.Player.SetVolume(new PlayerVolumeRequest(this._volume), cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async ValueTask<bool> SetVolumeAsync(int volume, CancellationToken cancellationToken = default)
+    {
+        var oldVolume = this._volume;
+
+        try
+        {
+            this._volume = Math.Clamp(volume, 0, 100);
+
+            var result = await this._client.Player.SetVolume(new PlayerVolumeRequest(this._volume), cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            this._volume = oldVolume;
+
+            return false;
+        }
+    }
+
     private async void GetPlayingTrackInfoAsync(object? state)
     {
         try
         {
-            var playbackState = await IsCurrentPlaybackEndedAsync();
+            var (track, playbackState) = await IsCurrentPlaybackEndedAsync();
 
             this.State = playbackState;
 
             switch (playbackState)
             {
                 case PlaybackState.Playing:
-                    return;
+                    var isOutOfSync = track!.Id != this._currentMusic?.Id;
+
+                    if (!isOutOfSync)
+                    {
+                        break;
+                    }
+
+                    this._currentMusic = null;
+
+                    this.PlaybackOutOfSyncEvent?.Invoke(this, new MusicPlayerEventArgs
+                    {
+                        Music = new Music(
+                            track.Id,
+                            track.Name,
+                            track.Artists.Select(a => new Artist(a.Id, a.Name, System.Array.Empty<string>())).ToArray(),
+                            track.Album.Name,
+                            string.Empty,
+                            track.DurationMs,
+                            new Uri(track.Uri)),
+                    });
+
+                    if (this.RemainingInQueue > 0)
+                    {
+                        await this.StopAsync();
+                    }
+
+                    break;
                 case PlaybackState.Ended:
                 case PlaybackState.Stopped:
                     if (this._currentMusic != null)
@@ -183,27 +332,29 @@ public class SpotifyProvider : IMusicProvider
             this._logger.LogError(ex, "An error occurred during track info gathering");
         }
 
-        async Task<PlaybackState> IsCurrentPlaybackEndedAsync()
+        async Task<(FullTrack? TrackAudio, PlaybackState State)> IsCurrentPlaybackEndedAsync()
         {
             var playingContext = await this._client.Player.GetCurrentPlayback();
 
             if (playingContext == null!)
             {
-                return PlaybackState.Stopped;
+                return (default, PlaybackState.Stopped);
             }
 
             if (playingContext.Item is not FullTrack currentTrack)
             {
-                return PlaybackState.Stopped;
+                return (default, PlaybackState.Stopped);
             }
 
-            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs;
-            var trackStopped = !playingContext.IsPlaying && playingContext.ProgressMs == 0;
+            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs - 1;
+            var trackStopped = playingContext is { IsPlaying: false, ProgressMs: 0 };
 
-            return
+            var playbackState =
                 trackEnded ? PlaybackState.Ended :
                 trackStopped ? PlaybackState.Stopped :
                 PlaybackState.Playing;
+
+            return (currentTrack, playbackState);
         }
     }
 
