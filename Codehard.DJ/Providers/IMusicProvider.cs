@@ -12,11 +12,15 @@ public delegate void PlayStartEventHandler(IMusicProvider sender, MusicPlayerEve
 
 public delegate void PlayEndEventHandler(IMusicProvider sender, MusicPlayerEventArgs args);
 
+public delegate void PlaybackOutOfSyncHandler(IMusicProvider sender, MusicPlayerEventArgs args);
+
 public interface IMusicProvider : IDisposable
 {
     event PlayStartEventHandler PlayStartEvent;
 
     event PlayEndEventHandler PlayEndEvent;
+
+    event PlaybackOutOfSyncHandler PlaybackOutOfSyncEvent;
 
     Music? Current { get; }
 
@@ -36,7 +40,15 @@ public interface IMusicProvider : IDisposable
 
     ValueTask PauseAsync(CancellationToken cancellationToken = default);
 
-    ValueTask<Music> StopAsync(CancellationToken cancellationToken = default);
+    ValueTask<Music?> StopAsync(CancellationToken cancellationToken = default);
 
     ValueTask<Music?> NextAsync(CancellationToken cancellationToken = default);
+
+    ValueTask AutoPlayAsync(CancellationToken cancellationToken = default);
+
+    ValueTask<bool> MuteAsync(CancellationToken cancellationToken = default);
+
+    ValueTask<bool> UnmuteAsync(CancellationToken cancellationToken = default);
+
+    ValueTask<bool> SetVolumeAsync(int volume, CancellationToken cancellationToken = default);
 }

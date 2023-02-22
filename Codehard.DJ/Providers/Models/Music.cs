@@ -8,6 +8,7 @@ public sealed record Music
         Artist[] artists,
         string album,
         string genre,
+        int duration,
         Uri? playSourceUri)
     {
         this.Id = id;
@@ -25,6 +26,10 @@ public sealed record Music
     public Artist[] Artists { get; }
 
     public string Album { get; }
+
+    public string Genre { get; }
+
+    public int Duration { get; }
 
     public Uri? PlaySourceUri { get; }
 

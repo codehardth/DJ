@@ -9,7 +9,6 @@ using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
-using DSharpPlus.SlashCommands;
 using Infrastructure.Discord;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -59,8 +58,7 @@ public class DjDiscordClient : DiscordClientAbstract
 
         this._musicProvider.PlayStartEvent += async (sender, args) =>
         {
-            var name =
-                $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
+            var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
 
             await this.Client.UpdateStatusAsync(new DiscordActivity
             {
@@ -79,6 +77,31 @@ public class DjDiscordClient : DiscordClientAbstract
                     ActivityType = ActivityType.Watching,
                 });
             }
+        };
+
+        this.Client.Ready += (_, _) =>
+        {
+            string? latestPresence = default;
+
+            this._musicProvider.PlaybackOutOfSyncEvent += async (_, args) =>
+            {
+                var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
+
+                if (name == latestPresence)
+                {
+                    return;
+                }
+
+                latestPresence = name;
+
+                await this.Client.UpdateStatusAsync(new DiscordActivity
+                {
+                    Name = name.Length > 128 ? name[..128] : name,
+                    ActivityType = ActivityType.ListeningTo,
+                });
+            };
+
+            return Task.CompletedTask;
         };
 
         this.Client.GuildDownloadCompleted += GuildDownloadedHandler;
@@ -185,7 +208,6 @@ public partial class DjCommandHandler : BaseCommandModule
         }
     }
 
-    [SlashCommand("skip", "Skip current playing music")]
     [Command("skip")]
     public async Task SkipMusicAsync(CommandContext ctx)
     {
@@ -219,7 +241,30 @@ public partial class DjCommandHandler : BaseCommandModule
         await ReactAsync(ctx, Emojis.ThumbsUp);
     }
 
-    [SlashCommand("queue", "Put the music into the queue")]
+    [Command("auto")]
+    public async Task AutoPlayAsync(CommandContext ctx)
+    {
+        if (!(this._musicProvider.Current == null && this._musicProvider.RemainingInQueue == 0))
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ctx.RespondAsync("There are musics currently in queue!");
+
+            return;
+        }
+
+        try
+        {
+            await this._musicProvider.AutoPlayAsync();
+
+            await ReactAsync(ctx, Emojis.ThumbsUp);
+        }
+        catch (Exception ex)
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ctx.RespondAsync(ex.Message);
+        }
+    }
+
     [Command("q")]
     public Task QueueMusicAsync(CommandContext ctx, [RemainingText] string queryText)
     {
@@ -290,7 +335,7 @@ public partial class DjCommandHandler : BaseCommandModule
         });
     }
 
-    private Task QueueMusicAsync(
+    public Task QueueMusicAsync(
         DiscordClient client,
         DiscordChannel channel,
         DiscordUser discordUser,
@@ -345,8 +390,7 @@ public partial class DjCommandHandler : BaseCommandModule
 
                 if (totalInQueue > 1)
                 {
-                    await client.SendMessageAsync(channel,
-                        $"{discordUser.Mention} {totalInQueue - 1} music(s) ahead in queue");
+                    await client.SendMessageAsync(channel, $"{discordUser.Mention} {totalInQueue - 1} music(s) ahead in queue");
                 }
 
                 var sb = new StringBuilder();
@@ -367,7 +411,6 @@ public partial class DjCommandHandler : BaseCommandModule
             });
     }
 
-    [SlashCommand("list-queue", "List current queue")]
     [Command("list-q")]
     public async Task ListQueueAsync(CommandContext ctx)
     {
@@ -399,7 +442,6 @@ public partial class DjCommandHandler : BaseCommandModule
         await ctx.RespondAsync(embed);
     }
 
-    [SlashCommand("search", "Search for a music")]
     [Command("search")]
     public async Task SearchAsync(CommandContext ctx, [RemainingText] string queryText)
     {
@@ -431,7 +473,6 @@ public partial class DjCommandHandler : BaseCommandModule
         }
     }
 
-    [SlashCommand("stat", "Display your played statistics")]
     [Command("stat")]
     public async Task GetStatAsync(CommandContext ctx)
     {
@@ -478,5 +519,29 @@ public partial class DjCommandHandler : BaseCommandModule
         };
 
         await ctx.RespondAsync(embed);
+    }
+
+    [Command("mute")]
+    public async Task MuteAsync(CommandContext ctx)
+    {
+        var success = await this._musicProvider.MuteAsync();
+
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+    }
+
+    [Command("unmute")]
+    public async Task UnmuteAsync(CommandContext ctx)
+    {
+        var success = await this._musicProvider.UnmuteAsync();
+
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+    }
+
+    [Command("vol")]
+    public async Task UnmuteAsync(CommandContext ctx, int volume)
+    {
+        var success = await this._musicProvider.SetVolumeAsync(volume);
+
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
     }
 }
