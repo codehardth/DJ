@@ -211,6 +211,14 @@ public partial class DjCommandHandler : BaseCommandModule
     [Command("skip")]
     public async Task SkipMusicAsync(CommandContext ctx)
     {
+        if (this._musicProvider.Current == null && this._musicProvider.RemainingInQueue == 0)
+        {
+            await this._musicProvider.NextAsync();
+            await ReactAsync(ctx, Emojis.ThumbsUp);
+
+            return;
+        }
+
         var member = await GetMemberAsync(ctx);
 
         if (member == null)

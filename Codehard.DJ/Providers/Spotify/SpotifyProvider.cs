@@ -150,6 +150,8 @@ public class SpotifyProvider : IMusicProvider
     {
         if (!this._queue.Any())
         {
+            await this._client.Player.SkipNext(cancellationToken);
+
             return default;
         }
 
