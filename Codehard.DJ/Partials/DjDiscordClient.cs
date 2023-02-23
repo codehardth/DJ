@@ -61,6 +61,19 @@ public partial class DjCommandHandler
             return;
         }
 
+        var banKey = GetBanKey(member.Id);
+
+        if (this.TryGetCache(banKey, out DateTimeOffset banLiftDateTime))
+        {
+            await ReactAsync(context, Emojis.NoEntry);
+
+            await context.RespondAsync(
+                $"You're banned from using the bot, " +
+                $"please try again in {(int)banLiftDateTime.Subtract(DateTimeOffset.UtcNow).TotalSeconds} second(s).");
+
+            return;
+        }
+
         var key = keyFunc(member);
 
         if (this.TryGetCache(key, out DateTimeOffset expirationDateTimeOffset))
@@ -133,4 +146,14 @@ public partial class DjCommandHandler
 
         return member;
     }
+
+    private static bool TryGetUserId(string mentionText, out ulong id)
+    {
+        var formattedText = mentionText.Replace("<@", "").Replace(">", "");
+
+        return ulong.TryParse(formattedText, out id);
+    }
+
+    private static string GetBanKey(ulong id)
+        => $"ban-{id}";
 }

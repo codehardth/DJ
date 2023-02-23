@@ -58,7 +58,8 @@ public class DjDiscordClient : DiscordClientAbstract
 
         this._musicProvider.PlayStartEvent += async (sender, args) =>
         {
-            var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
+            var name =
+                $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
 
             await this.Client.UpdateStatusAsync(new DiscordActivity
             {
@@ -85,7 +86,8 @@ public class DjDiscordClient : DiscordClientAbstract
 
             this._musicProvider.PlaybackOutOfSyncEvent += async (_, args) =>
             {
-                var name = $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
+                var name =
+                    $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
 
                 if (name == latestPresence)
                 {
@@ -398,7 +400,8 @@ public partial class DjCommandHandler : BaseCommandModule
 
                 if (totalInQueue > 1)
                 {
-                    await client.SendMessageAsync(channel, $"{discordUser.Mention} {totalInQueue - 1} music(s) ahead in queue");
+                    await client.SendMessageAsync(channel,
+                        $"{discordUser.Mention} {totalInQueue - 1} music(s) ahead in queue");
                 }
 
                 var sb = new StringBuilder();
@@ -551,5 +554,46 @@ public partial class DjCommandHandler : BaseCommandModule
         var success = await this._musicProvider.SetVolumeAsync(volume);
 
         await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+    }
+
+    [Command("ban")]
+    [RequireUserPermissions(Permissions.Administrator)]
+    public async Task BanUserAsync(CommandContext ctx, string mentionText, int banMinute = 10)
+    {
+        var banExpireTime = DateTimeOffset.UtcNow.AddMinutes(banMinute);
+
+        if (!TryGetUserId(mentionText, out var id))
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+
+            return;
+        }
+
+        var key = GetBanKey(id);
+
+        this._cache.Add(key, banExpireTime, new CacheItemPolicy
+        {
+            AbsoluteExpiration = banExpireTime,
+        });
+
+        await ctx.RespondAsync($"{mentionText} has been banned for {banMinute} minutes from queue command.");
+    }
+
+    [Command("unban")]
+    [RequireUserPermissions(Permissions.Administrator)]
+    public async Task UnbanUserAsync(CommandContext ctx, string mentionText)
+    {
+        if (!TryGetUserId(mentionText, out var id))
+        {
+            await ReactAsync(ctx, Emojis.ThumbsDown);
+
+            return;
+        }
+
+        var key = GetBanKey(id);
+
+        this._cache.Remove(key);
+
+        await ctx.RespondAsync($"{mentionText} ban has been lifted.");
     }
 }
