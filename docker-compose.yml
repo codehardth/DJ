@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  codehard-dj:
+    container_name: disco-club-at-codehard
+    build:
+      context: .
+      dockerfile: ./Codehard.DJ/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: ${Env}
+      Configurations__Spotify__ClientId: ${Spotify_ClientId}
+      Configurations__Spotify__ClientSecret: ${Spotify_ClientSecret}
+      Configurations__Discord__Active: ${Discord_Active}
+      Configurations__Discord__CommandCooldown: ${Discord_CommandCooldown}
+      Configurations__Discord__Token: ${Discord_Token}
+    ports:
+      - "8800:8800"
+    volumes:
+      - type: bind
+        source: ./Persistent/dj.db
+        target: /app/dj.db

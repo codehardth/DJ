@@ -63,7 +63,17 @@ public static class Bootstrap
             },
         };
 
-        BrowserUtil.Open(request.ToUri());
+        var uri = request.ToUri();
+
+        if (IsRunningInDocker())
+        {
+            Console.WriteLine("Please access this url on your browser:");
+            Console.WriteLine(uri);
+        }
+        else
+        {
+            BrowserUtil.Open(uri);
+        }
 
         while (true)
         {
@@ -82,6 +92,12 @@ public static class Bootstrap
 
                 throw;
             }
+        }
+
+        static bool IsRunningInDocker()
+        {
+            string value = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER");
+            return !string.IsNullOrEmpty(value) && value.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
     }
 
