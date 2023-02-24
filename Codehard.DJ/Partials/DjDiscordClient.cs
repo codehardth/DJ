@@ -124,11 +124,9 @@ public partial class DjCommandModule
         return true;
     }
 
-    private static Task ReactAsync(InteractionContext ctx, string emojiName)
+    private static Task ReactAsync(InteractionContext ctx, string emojiName, bool ephemeral = false)
     {
-        // return ctx.Message.CreateReactionAsync(DiscordEmoji.FromName(ctx.Client, emojiName));
-
-        return ctx.CreateResponseAsync($"{ctx.User.Mention} {emojiName}");
+        return ctx.CreateResponseAsync($"{ctx.User.Mention} {emojiName}", ephemeral);
     }
 
     private static Task ReactAsync(DiscordClient client, DiscordChannel channel, DiscordUser user, string emojiName)

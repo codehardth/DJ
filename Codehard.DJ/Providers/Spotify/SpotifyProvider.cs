@@ -285,7 +285,7 @@ public class SpotifyProvider : IMusicProvider
                         break;
                     }
 
-                    this._currentMusic = null;
+                    TryInvokePlaybackEnded();
 
                     this.PlaybackOutOfSyncEvent?.Invoke(this, new MusicPlayerEventArgs
                     {
@@ -307,17 +307,7 @@ public class SpotifyProvider : IMusicProvider
                     break;
                 case PlaybackState.Ended:
                 case PlaybackState.Stopped:
-                    if (this._currentMusic != null)
-                    {
-                        this._playedStack.Push(this._currentMusic);
-
-                        this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
-                        {
-                            Music = this._currentMusic!,
-                        });
-
-                        this._currentMusic = null;
-                    }
+                    TryInvokePlaybackEnded();
 
                     if (this._queue.Any())
                     {
@@ -357,6 +347,21 @@ public class SpotifyProvider : IMusicProvider
                 PlaybackState.Playing;
 
             return (currentTrack, playbackState);
+        }
+
+        void TryInvokePlaybackEnded()
+        {
+            if (this._currentMusic != null)
+            {
+                this._playedStack.Push(this._currentMusic);
+
+                this.PlayEndEvent?.Invoke(this, new MusicPlayerEventArgs
+                {
+                    Music = this._currentMusic!,
+                });
+
+                this._currentMusic = null;
+            }
         }
     }
 

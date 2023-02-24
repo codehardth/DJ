@@ -72,7 +72,6 @@ public class DjDiscordClient : DiscordClientAbstract
 
     protected override void ConfigureSlashCommands(SlashCommandsExtension slashCommandsExtension)
     {
-        // slashCommandsExtension.RegisterCommands(typeof(DjCommandModule), 425110014974492673);
         slashCommandsExtension.RegisterCommands<DjCommandModule>();
     }
 
@@ -106,11 +105,9 @@ public class DjDiscordClient : DiscordClientAbstract
     {
         if (sender.RemainingInQueue == 0)
         {
-            await this.Client.UpdateStatusAsync(new DiscordActivity
-            {
-                Name = "the empty queue",
-                ActivityType = ActivityType.Watching,
-            });
+            this._logger.LogInformation("Music queue is now empty, auto playing...");
+
+            await sender.AutoPlayAsync();
         }
     }
 
@@ -233,7 +230,7 @@ public partial class DjCommandModule : ApplicationCommandModule
         if (this._musicProvider.Current == null && this._musicProvider.RemainingInQueue == 0)
         {
             await this._musicProvider.NextAsync();
-            await ReactAsync(ctx, Emojis.ThumbsUp);
+            await ReactAsync(ctx, Emojis.ThumbsUp, true);
 
             return;
         }
@@ -242,30 +239,30 @@ public partial class DjCommandModule : ApplicationCommandModule
 
         if (member == null)
         {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ReactAsync(ctx, Emojis.ThumbsDown, true);
 
             return;
         }
 
         if (this._musicProvider.Current == null)
         {
-            await ReactAsync(ctx, Emojis.NoEntry);
-            await ctx.CreateResponseAsync("Current track is not tracking by the bot.");
+            await ReactAsync(ctx, Emojis.NoEntry, true);
+            await ctx.CreateResponseAsync("Current track is not tracking by the bot.", true);
 
             return;
         }
 
         if (!IsCurrentSongOwner(member))
         {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
-            await ctx.CreateResponseAsync("Please respect others rights!");
+            await ReactAsync(ctx, Emojis.ThumbsDown, true);
+            await ctx.CreateResponseAsync("Please respect others rights!", true);
 
             return;
         }
 
         await this._musicProvider.NextAsync();
 
-        await ReactAsync(ctx, Emojis.ThumbsUp);
+        await ReactAsync(ctx, Emojis.ThumbsUp, true);
     }
 
     [SlashCommand("auto", "Auto play the music.")]
@@ -283,12 +280,13 @@ public partial class DjCommandModule : ApplicationCommandModule
         {
             await this._musicProvider.AutoPlayAsync();
 
-            await ReactAsync(ctx, Emojis.ThumbsUp);
+            await ReactAsync(ctx, Emojis.ThumbsUp, true);
         }
         catch (Exception ex)
         {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
-            await ctx.CreateResponseAsync(ex.Message);
+            await ReactAsync(ctx, Emojis.ThumbsDown, true);
+
+            await ctx.FollowUpAsync(ex.Message, true);
         }
     }
 
@@ -315,7 +313,7 @@ public partial class DjCommandModule : ApplicationCommandModule
 
             await this._musicProvider.EnqueueAsync(music);
 
-            await ReactAsync(context, Emojis.ThumbsUp);
+            await ReactAsync(context, Emojis.ThumbsUp, true);
 
             member.AddTrack(
                 music.Id,
@@ -341,7 +339,7 @@ public partial class DjCommandModule : ApplicationCommandModule
 
             if (totalInQueue > 1)
             {
-                await context.FollowUpAsync($"{totalInQueue - 1} music(s) ahead in queue");
+                await context.FollowUpAsync($"{totalInQueue - 1} music(s) ahead in queue", true);
             }
 
             var sb = new StringBuilder();
@@ -358,7 +356,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                 Color = new Optional<DiscordColor>(DiscordColor.Blue),
             };
 
-            await ctx.FollowUpAsync(embed);
+            await ctx.FollowUpAsync(embed, true);
         });
     }
 
@@ -442,13 +440,13 @@ public partial class DjCommandModule : ApplicationCommandModule
     [SlashCommand("list-q", "Display the music in queue.")]
     public async Task ListQueueAsync(InteractionContext ctx)
     {
-        await ReactAsync(ctx, Emojis.ThumbsUp);
+        await ReactAsync(ctx, Emojis.ThumbsUp, true);
 
         var queue = (await this._musicProvider.GetCurrentQueueAsync()).Take(10).ToArray();
 
         if (!queue.Any())
         {
-            await ctx.FollowUpAsync("There is no music in queue");
+            await ctx.FollowUpAsync("There is no music in queue", true);
 
             return;
         }
@@ -467,7 +465,7 @@ public partial class DjCommandModule : ApplicationCommandModule
             Color = new Optional<DiscordColor>(DiscordColor.Green),
         };
 
-        await ctx.FollowUpAsync(embed);
+        await ctx.FollowUpAsync(embed, true);
     }
 
     [SlashCommand("search", "Search for the music.")]
@@ -549,7 +547,7 @@ public partial class DjCommandModule : ApplicationCommandModule
             Color = new Optional<DiscordColor>(DiscordColor.Purple),
         };
 
-        await ctx.CreateResponseAsync(embed);
+        await ctx.CreateResponseAsync(embed, true);
     }
 
     [SlashCommand("mute", "Mute the music.")]
@@ -557,7 +555,7 @@ public partial class DjCommandModule : ApplicationCommandModule
     {
         var success = await this._musicProvider.MuteAsync();
 
-        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown, true);
     }
 
     [SlashCommand("unmute", "Unmute the bot.")]
@@ -565,7 +563,7 @@ public partial class DjCommandModule : ApplicationCommandModule
     {
         var success = await this._musicProvider.UnmuteAsync();
 
-        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown, true);
     }
 
     [SlashCommand("vol", "Set volume for the bot.")]
@@ -573,7 +571,7 @@ public partial class DjCommandModule : ApplicationCommandModule
     {
         var success = await this._musicProvider.SetVolumeAsync((int)volume);
 
-        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown);
+        await ReactAsync(ctx, success ? Emojis.ThumbsUp : Emojis.ThumbsDown, true);
     }
 
     [SlashCommand("ban", "Ban a user from accessing bot.")]
@@ -584,7 +582,7 @@ public partial class DjCommandModule : ApplicationCommandModule
 
         if (!TryGetUserId(mentionText, out var id))
         {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ReactAsync(ctx, Emojis.ThumbsDown, true);
 
             return;
         }
@@ -605,7 +603,7 @@ public partial class DjCommandModule : ApplicationCommandModule
     {
         if (!TryGetUserId(mentionText, out var id))
         {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
+            await ReactAsync(ctx, Emojis.ThumbsDown, true);
 
             return;
         }
