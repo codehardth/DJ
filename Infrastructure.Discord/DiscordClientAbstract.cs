@@ -2,6 +2,7 @@
 using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
+using DSharpPlus.SlashCommands;
 
 namespace Infrastructure.Discord;
 
@@ -47,13 +48,12 @@ public abstract class DiscordClientAbstract : IAsyncDisposable
     protected DiscordClientAbstract(
         string token,
         string[] commandPrefixes,
-        IEnumerable<Type> commandModules,
         bool allowDms = false,
         bool allowMentionPrefix = false,
         IServiceProvider? serviceProvider = default)
         : this(token)
     {
-        var command = this.Client.UseCommandsNext(new CommandsNextConfiguration
+        var commandsNextExtension = this.Client.UseCommandsNext(new CommandsNextConfiguration
         {
             StringPrefixes = commandPrefixes,
             EnableDms = allowDms,
@@ -61,16 +61,18 @@ public abstract class DiscordClientAbstract : IAsyncDisposable
             Services = serviceProvider,
         });
 
-        foreach (var module in commandModules)
+        var slashCommandExtension = this.Client.UseSlashCommands(new SlashCommandsConfiguration
         {
-            if (!module.IsAssignableTo(typeof(BaseCommandModule)))
-            {
-                throw new Exception($"Type {module.FullName} is not a {nameof(BaseCommandModule)}");
-            }
+            Services = serviceProvider,
+        });
 
-            command.RegisterCommands(module);
-        }
+        this.ConfigureCommandsNext(commandsNextExtension);
+        this.ConfigureSlashCommands(slashCommandExtension);
     }
+
+    protected abstract void ConfigureCommandsNext(CommandsNextExtension commandsNextExtension);
+
+    protected abstract void ConfigureSlashCommands(SlashCommandsExtension slashCommandsExtension);
 
     private Task Client_GuildMemberRemoved(DiscordClient sender, GuildMemberRemoveEventArgs e)
     {
