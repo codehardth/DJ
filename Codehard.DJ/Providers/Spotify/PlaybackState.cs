@@ -2,6 +2,7 @@
 
 public enum PlaybackState
 {
+    Unknown,
     Playing,
     Ended,
     Stopped,

@@ -12,7 +12,9 @@ public delegate void PlayStartEventHandler(IMusicProvider sender, MusicPlayerEve
 
 public delegate void PlayEndEventHandler(IMusicProvider sender, MusicPlayerEventArgs args);
 
-public delegate void PlaybackOutOfSyncHandler(IMusicProvider sender, MusicPlayerEventArgs args);
+public delegate void PlayerStateChangedEventHandler(IMusicProvider sender, PlaybackState state);
+
+public delegate void PlaybackOutOfSyncEventHandler(IMusicProvider sender, MusicPlayerEventArgs args);
 
 public interface IMusicProvider : IDisposable
 {
@@ -20,7 +22,9 @@ public interface IMusicProvider : IDisposable
 
     event PlayEndEventHandler PlayEndEvent;
 
-    event PlaybackOutOfSyncHandler PlaybackOutOfSyncEvent;
+    event PlayerStateChangedEventHandler PlayerStateChangedEvent;
+
+    event PlaybackOutOfSyncEventHandler PlaybackOutOfSyncEvent;
 
     Music? Current { get; }
 

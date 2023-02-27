@@ -39,7 +39,6 @@ builder.ConfigureServices((context, services) =>
     services.TryAddSingleton<IMusicProvider, SpotifyProvider>();
 
     var discordConfig = configSection.GetSection("Discord");
-
     var discordActive = discordConfig.GetValue<bool>("Active");
 
     if (discordActive)

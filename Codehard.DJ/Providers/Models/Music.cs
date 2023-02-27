@@ -6,8 +6,7 @@ public sealed record Music
         string id,
         string title,
         Artist[] artists,
-        string album,
-        string genre,
+        Album album,
         int duration,
         Uri? playSourceUri)
     {
@@ -25,9 +24,7 @@ public sealed record Music
 
     public Artist[] Artists { get; }
 
-    public string Album { get; }
-
-    public string Genre { get; }
+    public Album Album { get; }
 
     public int Duration { get; }
 
@@ -37,6 +34,6 @@ public sealed record Music
 
     public override string ToString()
     {
-        return $"🎵 {this.Title} - {this.Album} by {string.Join(", ", this.Artists.Select(a => a.Name))}";
+        return $"🎵 {this.Title} - {this.Album.Name} by {string.Join(", ", this.Artists.Select(a => a.Name))}";
     }
 }

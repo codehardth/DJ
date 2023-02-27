@@ -28,7 +28,7 @@ public abstract class DiscordClientAbstract : IAsyncDisposable
         this._guilds = new List<DiscordGuild>();
         this._members = new List<DiscordMember>();
 
-        this.Client = new DiscordClient(new DiscordConfiguration()
+        this.Client = new DiscordClient(new DiscordConfiguration
         {
             Token = token,
             TokenType = TokenType.Bot,

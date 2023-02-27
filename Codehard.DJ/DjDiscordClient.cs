@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.Channels;
 using Codehard.DJ.Extensions;
 using Codehard.DJ.Providers;
+using Codehard.DJ.Providers.Spotify;
 using DJ.Domain.Entities;
 using DJ.Domain.Interfaces;
 using DSharpPlus;
@@ -40,6 +41,8 @@ public class DjDiscordClient : DiscordClientAbstract
     private readonly ILogger<DjDiscordClient> _logger;
     private readonly IMusicProvider _musicProvider;
 
+    private static string? latestPresence = default;
+
     public DjDiscordClient(
         string token,
         IServiceProvider serviceProvider,
@@ -56,9 +59,6 @@ public class DjDiscordClient : DiscordClientAbstract
         this._memberRepository = memberRepository;
         this._logger = logger;
         this._musicProvider = musicProvider;
-
-        this._musicProvider.PlayStartEvent += PlayStartEventHandler;
-        this._musicProvider.PlayEndEvent += PlayEndEventHandler;
 
         this.Client.Ready += ClientReadyHandler;
         this.Client.GuildDownloadCompleted += GuildDownloadedHandler;
@@ -77,28 +77,31 @@ public class DjDiscordClient : DiscordClientAbstract
 
     private Task ClientReadyHandler(DiscordClient sender, ReadyEventArgs e)
     {
-        string? latestPresence = default;
-
-        this._musicProvider.PlaybackOutOfSyncEvent += async (_, args) =>
-        {
-            var name =
-                $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
-
-            if (name == latestPresence)
-            {
-                return;
-            }
-
-            latestPresence = name;
-
-            await this.Client.UpdateStatusAsync(new DiscordActivity
-            {
-                Name = name.Length > 128 ? name[..128] : name,
-                ActivityType = ActivityType.ListeningTo,
-            });
-        };
+        this._musicProvider.PlayStartEvent += PlayStartEventHandler;
+        this._musicProvider.PlayEndEvent += PlayEndEventHandler;
+        this._musicProvider.PlayerStateChangedEvent += PlayerStateChangedHandler;
+        this._musicProvider.PlaybackOutOfSyncEvent += PlaybackOutOfSyncHandler;
 
         return Task.CompletedTask;
+    }
+
+    private async void PlaybackOutOfSyncHandler(IMusicProvider sender, MusicPlayerEventArgs args)
+    {
+        var name =
+            $"{args.Music.Title} - {args.Music.Album} by {string.Join(", ", args.Music.Artists.Select(a => a.Name))}";
+
+        if (name == latestPresence)
+        {
+            return;
+        }
+
+        latestPresence = name;
+
+        await this.Client.UpdateStatusAsync(new DiscordActivity
+        {
+            Name = name.Length > 128 ? name[..128] : name,
+            ActivityType = ActivityType.ListeningTo,
+        });
     }
 
     private async void PlayEndEventHandler(IMusicProvider sender, MusicPlayerEventArgs args)
@@ -121,6 +124,20 @@ public class DjDiscordClient : DiscordClientAbstract
             Name = name.Length > 128 ? name[..128] : name,
             ActivityType = ActivityType.ListeningTo,
         });
+    }
+
+    private async void PlayerStateChangedHandler(IMusicProvider sender, PlaybackState state)
+    {
+        if (state == PlaybackState.Stopped)
+        {
+            latestPresence = null;
+
+            await this.Client.UpdateStatusAsync(new DiscordActivity
+            {
+                Name = "an empty music queue...",
+                ActivityType = ActivityType.Watching,
+            });
+        }
     }
 
     private static async Task MessageReactionAddedHandler(DiscordClient sender, MessageReactionAddEventArgs e)
@@ -319,7 +336,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                 music.Id,
                 music.Title,
                 music.Artists.Select(a => a.Name),
-                music.Album,
+                music.Album.Name,
                 music.PlaySourceUri,
                 music.Artists.SelectMany(a => a.Genres));
 
@@ -354,6 +371,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                 Title = $"The last {prevs.Length} music(s) in queue are",
                 Description = sb.ToString(),
                 Color = new Optional<DiscordColor>(DiscordColor.Blue),
+                ImageUrl = music.Album.Images.FirstOrDefault(),
             };
 
             await ctx.FollowUpAsync(embed, true);
@@ -395,7 +413,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                     music.Id,
                     music.Title,
                     music.Artists.Select(a => a.Name),
-                    music.Album,
+                    music.Album.Name,
                     music.PlaySourceUri,
                     music.Artists.SelectMany(a => a.Genres));
 
@@ -431,6 +449,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                     Title = $"The last {prevs.Length} music(s) in queue are",
                     Description = sb.ToString(),
                     Color = new Optional<DiscordColor>(DiscordColor.Blue),
+                    ImageUrl = music.Album.Images.FirstOrDefault(),
                 };
 
                 await client.SendMessageAsync(channel, embed);

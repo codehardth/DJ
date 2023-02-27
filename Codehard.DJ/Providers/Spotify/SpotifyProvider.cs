@@ -36,7 +36,9 @@ public class SpotifyProvider : IMusicProvider
 
     public event PlayEndEventHandler? PlayEndEvent;
 
-    public event PlaybackOutOfSyncHandler? PlaybackOutOfSyncEvent;
+    public event PlayerStateChangedEventHandler? PlayerStateChangedEvent;
+
+    public event PlaybackOutOfSyncEventHandler? PlaybackOutOfSyncEvent;
 
     public Music? Current => this._currentMusic;
 
@@ -64,8 +66,7 @@ public class SpotifyProvider : IMusicProvider
                                   (_, r) => r)
                               .Select(fa => new Artist(fa.Id, fa.Name, fa.Genres))
                               .ToArray(),
-                          item.Album.Name,
-                          string.Empty,
+                          new Album(item.Album.Name, item.Album.Images.Select(i => i.Url).ToArray(), string.Empty),
                           item.DurationMs,
                           new Uri(item.Uri)))
                   ?? Enumerable.Empty<Music>();
@@ -273,6 +274,11 @@ public class SpotifyProvider : IMusicProvider
         {
             var (track, playbackState) = await IsCurrentPlaybackEndedAsync();
 
+            if (this.State != playbackState)
+            {
+                this.PlayerStateChangedEvent?.Invoke(this, playbackState);
+            }
+
             this.State = playbackState;
 
             switch (playbackState)
@@ -293,8 +299,7 @@ public class SpotifyProvider : IMusicProvider
                             track.Id,
                             track.Name,
                             track.Artists.Select(a => new Artist(a.Id, a.Name, System.Array.Empty<string>())).ToArray(),
-                            track.Album.Name,
-                            string.Empty,
+                            new Album(track.Album.Name, track.Album.Images.Select(i => i.Url).ToArray(), string.Empty),
                             track.DurationMs,
                             new Uri(track.Uri)),
                     });
@@ -305,8 +310,8 @@ public class SpotifyProvider : IMusicProvider
                     }
 
                     break;
-                case PlaybackState.Ended:
                 case PlaybackState.Stopped:
+                case PlaybackState.Ended:
                     TryInvokePlaybackEnded();
 
                     if (this._queue.Any())
