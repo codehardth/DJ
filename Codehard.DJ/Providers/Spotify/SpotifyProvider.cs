@@ -46,13 +46,19 @@ public class SpotifyProvider : IMusicProvider
 
     public PlaybackState State { get; private set; }
 
-    public async ValueTask<IEnumerable<Music>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default)
+    public async ValueTask<IEnumerable<Music>> SearchAsync(
+        string query,
+        int limit = 10,
+        CancellationToken cancellationToken = default)
     {
-        var searchResponse = await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query) { Limit = limit, }, cancellationToken);
+        var searchResponse =
+            await this._client.Search.Item(new SearchRequest(SearchRequest.Types.All, query) { Limit = limit, },
+                cancellationToken);
 
         var artistIds = searchResponse.Tracks.Items!.SelectMany(t => t.Artists.Select(a => a.Id));
 
-        var artistsResponse = await this._client.Artists.GetSeveral(new ArtistsRequest(artistIds.ToList()), cancellationToken);
+        var artistsResponse =
+            await this._client.Artists.GetSeveral(new ArtistsRequest(artistIds.ToList()), cancellationToken);
 
         var res = searchResponse.Tracks.Items?
                       .Select(item => new Music(
@@ -205,13 +211,12 @@ public class SpotifyProvider : IMusicProvider
                     .ToAff()
             from queueRemaining in
                 remaining
-                    .SequenceParallel(u => this._client.Player.AddToQueue(new PlayerAddToQueueRequest(u), cancellationToken))
+                    .SequenceParallel(u =>
+                        this._client.Player.AddToQueue(new PlayerAddToQueueRequest(u), cancellationToken))
                     .ToAff()
             select unit;
 
-        var fin = await workflow.Run();
-
-        _ = fin.ThrowIfFail();
+        _ = await workflow.Run();
     }
 
     public async ValueTask<bool> MuteAsync(CancellationToken cancellationToken = default)
