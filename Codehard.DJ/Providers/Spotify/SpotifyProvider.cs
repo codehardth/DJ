@@ -1,5 +1,6 @@
 ﻿using Codehard.DJ.Extensions;
 using Codehard.DJ.Providers.Models;
+using Codehard.Functional;
 using Microsoft.Extensions.Logging;
 using SpotifyAPI.Web;
 
@@ -171,19 +172,25 @@ public class SpotifyProvider : IMusicProvider
 
     public async ValueTask AutoPlayAsync(CancellationToken cancellationToken = default)
     {
+        const string discoverWeeklySearch = "Discover Weekly";
+
         var workflow =
             from response in
                 Aff(async () => await this._client.Search.Item(
-                    new SearchRequest(SearchRequest.Types.Playlist, "Discover Weekly"), cancellationToken))
+                    new SearchRequest(SearchRequest.Types.Playlist, discoverWeeklySearch), cancellationToken))
             let responsePlaylists = response.Playlists
-            let playlists =
-                responsePlaylists.Items.Filter(p => p.Owner.DisplayName == "Spotify")
-            from itemsNotEmptyGuard in
-                guard(playlists.Any(), Error.New(0, "No item available to play"))
+            from playlist in
+                responsePlaylists.Items.SingleOrNoneOrFailEff(
+                        p => p.Owner.DisplayName == "Spotify" && p.Name == discoverWeeklySearch)
+                    .Bind(opt =>
+                        opt.Match(SuccessEff,
+                            () => FailEff<SimplePlaylist>(Error.New(0, "No item available to play"))))
             from playlistTracks in
-                playlists.SequenceParallel(p =>
-                        this._client.Playlists.GetItems(p.Id, cancellationToken))
+                this._client.Playlists.GetItems(playlist.Id, cancellationToken)
                     .ToAff()
+                    .Map(p =>
+                        p.Items.Filter(t => t.Track is FullTrack)
+                            .Map(t => (FullTrack)t.Track))
             from deviceResponse in
                 this._client.Player.GetAvailableDevices(cancellationToken)
                     .ToAff()
@@ -191,28 +198,13 @@ public class SpotifyProvider : IMusicProvider
                 guard(deviceResponse.Devices.Any(), Error.New(0, "Unable to find any device to play"))
             let device = deviceResponse.Devices.FirstOrDefault(d => d.IsActive)
                          ?? deviceResponse.Devices.First()
-            let tracks =
-                playlistTracks.Bind(t => t.Items)
-                    .Map(t => Optional(t.Track as FullTrack))
-                    .Filter(opt => opt.IsSome)
-                    .Shuffle()
-                    .Take(20)
-            let uris =
-                tracks.Map(opt => opt.Match(t => t.Uri, static () => string.Empty))
-                    .Filter(u => !string.IsNullOrWhiteSpace(u))
-            let first = uris.First()
-            let remaining = uris.Skip(1)
+            let first = playlistTracks.Shuffle().First()
             from playFirst in
                 this._client.Player.ResumePlayback(new PlayerResumePlaybackRequest
                     {
-                        Uris = new[] { uris.First() },
+                        Uris = new[] { first.Uri },
                         DeviceId = device.Id,
                     }, cancellationToken)
-                    .ToAff()
-            from queueRemaining in
-                remaining
-                    .SequenceParallel(u =>
-                        this._client.Player.AddToQueue(new PlayerAddToQueueRequest(u), cancellationToken))
                     .ToAff()
             select unit;
 

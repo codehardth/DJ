@@ -1,7 +1,6 @@
 ﻿using System.Runtime.Caching;
 using DJ.Domain.Entities;
 using DSharpPlus;
-using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
 using Infrastructure.Discord;

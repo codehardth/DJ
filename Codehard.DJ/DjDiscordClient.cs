@@ -137,6 +137,11 @@ public class DjDiscordClient : DiscordClientAbstract
                 Name = "an empty music queue...",
                 ActivityType = ActivityType.Watching,
             });
+
+            if (sender.RemainingInQueue == 0)
+            {
+                await sender.AutoPlayAsync();
+            }
         }
     }
 
