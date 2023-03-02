@@ -306,7 +306,8 @@ public partial class DjCommandModule : ApplicationCommandModule
     }
 
     [SlashCommand("q", "Queue the music using query text")]
-    public Task QueueMusicAsync(InteractionContext ctx, [Option("queryText", "Query text to search for music to place in queue."), RemainingText] string queryText)
+    public Task QueueMusicAsync(InteractionContext ctx,
+        [Option("queryText", "Query text to search for music to place in queue."), RemainingText] string queryText)
     {
         return PerformWithThrottlePolicy(ctx, m => $"queue-{m.Id}", async (context, member) =>
         {
@@ -486,7 +487,8 @@ public partial class DjCommandModule : ApplicationCommandModule
     }
 
     [SlashCommand("search", "Search for the music.")]
-    public async Task SearchAsync(InteractionContext ctx, [Option("queryText", "Query text to search for music."), RemainingText] string queryText)
+    public async Task SearchAsync(InteractionContext ctx,
+        [Option("queryText", "Query text to search for music."), RemainingText] string queryText)
     {
         var searchResult = (await this._musicProvider.SearchAsync(queryText, 3)).ToArray();
 
@@ -511,6 +513,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                         Text = $"{music.Title} {music.Album} {artists}",
                     },
                     Color = new Optional<DiscordColor>(DiscordColor.Blue),
+                    ImageUrl = music.Album.Images.FirstOrDefault(),
                 };
 
                 return embed.Build();
@@ -593,7 +596,9 @@ public partial class DjCommandModule : ApplicationCommandModule
 
     [SlashCommand("ban", "Ban a user from accessing bot.")]
     [RequireUserPermissions(Permissions.Administrator)]
-    public async Task BanUserAsync(InteractionContext ctx, [Option("mentionText", "A user mention text.")] string mentionText, [Option("banMinute", "Ban duration in minute.")] long banMinute = 10)
+    public async Task BanUserAsync(InteractionContext ctx,
+        [Option("mentionText", "A user mention text.")] string mentionText,
+        [Option("banMinute", "Ban duration in minute.")] long banMinute = 10)
     {
         var banExpireTime = DateTimeOffset.UtcNow.AddMinutes(banMinute);
 
@@ -616,7 +621,8 @@ public partial class DjCommandModule : ApplicationCommandModule
 
     [SlashCommand("unban", "Unban.")]
     [RequireUserPermissions(Permissions.Administrator)]
-    public async Task UnbanUserAsync(InteractionContext ctx, [Option("mentionText", "A user mention text.")] string mentionText)
+    public async Task UnbanUserAsync(InteractionContext ctx,
+        [Option("mentionText", "A user mention text.")] string mentionText)
     {
         if (!TryGetUserId(mentionText, out var id))
         {
