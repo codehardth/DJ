@@ -109,8 +109,6 @@ public class DjDiscordClient : DiscordClientAbstract
         if (sender.RemainingInQueue == 0)
         {
             this._logger.LogInformation("Music queue is now empty, auto playing...");
-
-            await sender.AutoPlayAsync();
         }
     }
 
@@ -137,11 +135,6 @@ public class DjDiscordClient : DiscordClientAbstract
                 Name = "an empty music queue...",
                 ActivityType = ActivityType.Watching,
             });
-
-            if (sender.RemainingInQueue == 0)
-            {
-                await sender.AutoPlayAsync();
-            }
         }
     }
 
