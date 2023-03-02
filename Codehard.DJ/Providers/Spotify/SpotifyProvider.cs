@@ -321,7 +321,7 @@ public class SpotifyProvider : IMusicProvider
                     throw new NotSupportedException();
             }
         }
-        catch (APIException ex)
+        catch (Exception ex)
         {
             this._logger.LogError(ex, "An error occurred during track info gathering");
         }
