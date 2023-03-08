@@ -43,4 +43,22 @@ public static class InteractionContextExtensions
                 IsEphemeral = ephemeral,
             });
     }
+
+    public static async Task EditResponseAsync(this InteractionContext context, string content, CancellationToken cancellationToken = default)
+    {
+        await context.EditResponseAsync(new DiscordWebhookBuilder
+        {
+            Content = content,
+        });
+    }
+
+    public static async Task EditResponseAsync(this InteractionContext context, DiscordEmbed embed, CancellationToken cancellationToken = default)
+    {
+        await context.EditResponseAsync(new DiscordWebhookBuilder().AddEmbed(embed));
+    }
+
+    public static async Task EditResponseAsync(this InteractionContext context, IEnumerable<DiscordEmbed> embeds, CancellationToken cancellationToken = default)
+    {
+        await context.EditResponseAsync(new DiscordWebhookBuilder().AddEmbeds(embeds));
+    }
 }

@@ -55,6 +55,9 @@ public class DjDbContext : DbContext
         builder.Property(t => t.Score)
             .IsRequired();
         builder.Property(t => t.Uri);
+        builder.Property(t => t.ConsiderInappropriate)
+            .IsRequired()
+            .HasDefaultValue(false);
         builder.Property(t => t.CreatedAt)
             .IsRequired();
 

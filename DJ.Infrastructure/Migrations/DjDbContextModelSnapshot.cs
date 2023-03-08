@@ -50,6 +50,11 @@ namespace DJ.Infrastructure.Migrations
                                 .IsRequired()
                                 .HasColumnType("TEXT");
 
+                            b1.Property<bool>("ConsiderInappropriate")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("INTEGER")
+                                .HasDefaultValue(false);
+
                             b1.Property<DateTimeOffset>("CreatedAt")
                                 .HasColumnType("TEXT");
 

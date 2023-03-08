@@ -10,6 +10,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenAI;
+using OpenAI.Models;
 
 var builder = Host.CreateDefaultBuilder(args);
 
@@ -37,6 +39,10 @@ builder.ConfigureServices((context, services) =>
 
     services.TryAddSingleton(spotifyClient);
     services.TryAddSingleton<IMusicProvider, SpotifyProvider>();
+
+    var chatGptConfig = configSection.GetSection("ChatGPT");
+    var api = new OpenAIClient(new OpenAIAuthentication(chatGptConfig["AccessToken"]), Model.GPT3_5_Turbo);
+    services.TryAddSingleton(api);
 
     var discordConfig = configSection.GetSection("Discord");
     var discordActive = discordConfig.GetValue<bool>("Active");

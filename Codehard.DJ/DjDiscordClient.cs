@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.Channels;
 using Codehard.DJ.Extensions;
 using Codehard.DJ.Providers;
+using Codehard.DJ.Providers.Models;
 using Codehard.DJ.Providers.Spotify;
 using DJ.Domain.Entities;
 using DJ.Domain.Interfaces;
@@ -15,6 +16,8 @@ using DSharpPlus.SlashCommands;
 using Infrastructure.Discord;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using OpenAI;
+using OpenAI.Chat;
 
 namespace Codehard.DJ;
 
@@ -195,6 +198,7 @@ public partial class DjCommandModule : ApplicationCommandModule
     private const string CacheName = "CommandCache";
 
     private static readonly MemoryCache _cache = new(CacheName);
+    private readonly OpenAIClient _api;
     private readonly IMemberRepository _memberRepository;
     private readonly IMusicProvider _musicProvider;
     private readonly ILogger<DjCommandModule> _logger;
@@ -202,11 +206,13 @@ public partial class DjCommandModule : ApplicationCommandModule
     private readonly int _cooldown;
 
     public DjCommandModule(
+        OpenAIClient api,
         IMemberRepository memberRepository,
         IMusicProvider musicProvider,
         IConfiguration configuration,
         ILogger<DjCommandModule> logger)
     {
+        _api = api;
         this._memberRepository = memberRepository;
         this._musicProvider = musicProvider;
         this._logger = logger;
@@ -338,6 +344,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                 music.Artists.Select(a => a.Name),
                 music.Album.Name,
                 music.PlaySourceUri,
+                await this.CheckIfInappropriateAsync(music),
                 music.Artists.SelectMany(a => a.Genres));
 
             await this._memberRepository.UpdateAsync(member);
@@ -415,6 +422,7 @@ public partial class DjCommandModule : ApplicationCommandModule
                     music.Artists.Select(a => a.Name),
                     music.Album.Name,
                     music.PlaySourceUri,
+                    await this.CheckIfInappropriateAsync(music),
                     music.Artists.SelectMany(a => a.Genres));
 
                 await this._memberRepository.UpdateAsync(member);
@@ -456,6 +464,29 @@ public partial class DjCommandModule : ApplicationCommandModule
             });
     }
 
+    private async Task<bool> CheckIfInappropriateAsync(Music music)
+    {
+        try
+        {
+            var chatRequest = new ChatRequest(new ChatPrompt[]
+            {
+                new("system",
+                    "You are an expert in languages, and can tell if a word is considered rude or inappropriate, you always answer with true or false only and nothing else."),
+                new("user", "Is the word bitch contains some word considered rude or inappropriate?"),
+                new("assistant", "true"),
+                new("user", $"Is {music} contains some word considered rude or inappropriate? You may only answer with true or false only."),
+            });
+
+            var result = await this._api.ChatEndpoint.GetCompletionAsync(chatRequest);
+
+            return bool.TryParse(result.FirstChoice, out var res) && res;
+        }
+        catch (Exception ex)
+        {
+            return false;
+        }
+    }
+
     [SlashCommand("list-q", "Display the music in queue.")]
     public async Task ListQueueAsync(InteractionContext ctx)
     {
@@ -490,8 +521,10 @@ public partial class DjCommandModule : ApplicationCommandModule
     [SlashCommand("search", "Search for the music.")]
     public async Task SearchAsync(
         InteractionContext ctx,
-        [Option("queryText", "Query text to search for music.")] string queryText, 
-        [Option("size", "Search result size.", true)] long size = 3)
+        [Option("queryText", "Query text to search for music.")]
+        string queryText,
+        [Option("size", "Search result size.", true)]
+        long size = 3)
     {
         var searchResult = (await this._musicProvider.SearchAsync(queryText, (int)Math.Clamp(size, 1, 10))).ToArray();
 
@@ -642,5 +675,41 @@ public partial class DjCommandModule : ApplicationCommandModule
         _cache.Remove(key);
 
         await ctx.CreateResponseAsync($"{mentionText} ban has been lifted.");
+    }
+
+    [SlashCommand("chat", "Chat with the 'music expert'")]
+    public async Task ChatAsync(
+        InteractionContext ctx,
+        [Option("query", "A query text")] string query)
+    {
+        await ctx.DeferAsync();
+
+        try
+        {
+            var chatRequest = new ChatRequest(new ChatPrompt[]
+            {
+                new("system", "You are a music expert and able to answer any question related to music."),
+                new ("system", "When user asking some question without a context given, you usually answer with a recommended music in format of  Music_Name from Album_Name of Artist_Name"),
+                new("user", "What's a good song about the hammer?"),
+                new("assistant", "Maxwell's Silver Hammer from Abbey Road by The Beatles"),
+                new("user", query),
+            });
+
+            var result = await this._api.ChatEndpoint.GetCompletionAsync(chatRequest);
+
+            await ctx.EditResponseAsync(new DiscordWebhookBuilder
+            {
+                Content = result.FirstChoice,
+            });
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error!");
+
+            await ctx.EditResponseAsync(new DiscordWebhookBuilder
+            {
+                Content = "I can't answer that.",
+            });
+        }
     }
 }

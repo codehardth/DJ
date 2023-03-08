@@ -2,8 +2,9 @@
 
 public class PlayedTrack
 {
-    public PlayedTrack()
+    public PlayedTrack(bool considerInappropriate)
     {
+        ConsiderInappropriate = considerInappropriate;
         // Entity Framework Constructor
     }
 
@@ -16,6 +17,7 @@ public class PlayedTrack
         string[] genres,
         int score,
         Uri? uri,
+        bool considerInappropriate,
         DateTimeOffset createdAt)
     {
         this.Id = id;
@@ -26,6 +28,7 @@ public class PlayedTrack
         this.Genres = genres;
         this.Score = score;
         this.Uri = uri;
+        this.ConsiderInappropriate = considerInappropriate;
         this.CreatedAt = createdAt;
     }
 
@@ -45,6 +48,8 @@ public class PlayedTrack
 
     public Uri? Uri { get; }
 
+    public bool ConsiderInappropriate { get; }
+
     public DateTimeOffset CreatedAt { get; }
 
     public virtual Member Member { get; protected set; }
@@ -55,6 +60,7 @@ public class PlayedTrack
         string[] artists,
         string album,
         string[] genres,
+        bool isInappropriate,
         Uri? uri)
         => new(Guid.Empty,
             trackId,
@@ -64,5 +70,6 @@ public class PlayedTrack
             genres,
             5,
             uri,
+            isInappropriate,
             DateTimeOffset.UtcNow);
 }

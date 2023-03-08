@@ -33,6 +33,7 @@ public partial class Member
         IEnumerable<string> artists,
         string album,
         Uri? uri,
+        bool isInappropriate,
         IEnumerable<string> genres)
     {
         var playedTrack =
@@ -42,6 +43,7 @@ public partial class Member
                 artists.Distinct().ToArray(),
                 album,
                 genres.Distinct().ToArray(),
+                isInappropriate,
                 uri);
 
         this._playedTracks.Add(playedTrack);
