@@ -1,4 +1,5 @@
-﻿using Codehard.DJ.Extensions;
+﻿using System.Reactive.Linq;
+using Codehard.DJ.Extensions;
 using Codehard.DJ.Providers.Models;
 using Codehard.Functional;
 using Microsoft.Extensions.Logging;
@@ -10,13 +11,13 @@ public class SpotifyProvider : IMusicProvider
 {
     private readonly SpotifyClient _client;
     private readonly ILogger<SpotifyProvider> _logger;
-    private readonly Timer _timer;
     private readonly Queue<Music> _queue;
     private readonly Stack<Music> _playedStack;
 
     private Music? _currentMusic;
     private bool _disposed;
     private int _volume = -1;
+    private readonly Action _disposer;
 
     public SpotifyProvider(
         SpotifyClient client,
@@ -30,7 +31,10 @@ public class SpotifyProvider : IMusicProvider
         // so we doing the queue in memory
         this._queue = new Queue<Music>();
         this._playedStack = new Stack<Music>();
-        this._timer = new Timer(GetPlayingTrackInfoAsync, default, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+
+        var disposeSubscriptionAction = GetPlayingTrackInfo();
+
+        this._disposer = disposeSubscriptionAction;
     }
 
     public event PlayStartEventHandler? PlayStartEvent;
@@ -265,90 +269,97 @@ public class SpotifyProvider : IMusicProvider
         }
     }
 
-    private async void GetPlayingTrackInfoAsync(object? state)
+    private Action GetPlayingTrackInfo()
     {
-        try
+        var playbackStateObserver =
+            Observable.Timer(TimeSpan.Zero, TimeSpan.FromSeconds(3))
+                .SelectMany(_ => Observable.FromAsync(GetPlayerInfoAsync))
+                .Do(t => this.State = t.State);
+
+        var stateChangedSubscription =
+            playbackStateObserver
+                .DistinctUntilChanged(t => t.State)
+                .Subscribe(t => this.PlayerStateChangedEvent?.Invoke(this, t.State));
+
+        var playStoppedOrEndedSubscription =
+            playbackStateObserver
+                .Where(t => t.State is PlaybackState.Ended or PlaybackState.Stopped)
+                .Select(t => t.TrackAudio)
+                .Subscribe(PlayerStoppedOrEndedSubscribeHandler);
+
+        var playbackOutOfSyncSubscription =
+            playbackStateObserver
+                .Where(t =>
+                    t.State is PlaybackState.Playing &&
+                    t.TrackAudio!.Id != this._currentMusic?.Id)
+                .Select(t => t.TrackAudio)
+                .DistinctUntilChanged(_ => this.RemainingInQueue)
+                .Subscribe(PlaybackOutOfSyncHandler!);
+
+        return () =>
         {
-            var (track, playbackState) = await IsCurrentPlaybackEndedAsync();
+            stateChangedSubscription.Dispose();
+            playStoppedOrEndedSubscription.Dispose();
+            playbackOutOfSyncSubscription.Dispose();
+        };
 
-            if (this.State != playbackState)
+        async void PlaybackOutOfSyncHandler(FullTrack track)
+        {
+            TryInvokePlaybackEnded();
+
+            this.PlaybackOutOfSyncEvent?.Invoke(this,
+                new MusicPlayerEventArgs
+                {
+                    Music = new Music(track.Id, track.Name, track.Artists.Select(a => new Artist(a.Id, a.Name, System.Array.Empty<string>())).ToArray(),
+                        new Album(track.Album.Name, track.Album.Images.Select(i => i.Url).ToArray(), string.Empty), track.DurationMs, new Uri(track.Uri)),
+                });
+
+            if (this.RemainingInQueue > 0)
             {
-                this.PlayerStateChangedEvent?.Invoke(this, playbackState);
-            }
-
-            this.State = playbackState;
-
-            switch (playbackState)
-            {
-                case PlaybackState.Playing:
-                    var isOutOfSync = track!.Id != this._currentMusic?.Id;
-
-                    if (!isOutOfSync)
-                    {
-                        break;
-                    }
-
-                    TryInvokePlaybackEnded();
-
-                    this.PlaybackOutOfSyncEvent?.Invoke(this, new MusicPlayerEventArgs
-                    {
-                        Music = new Music(
-                            track.Id,
-                            track.Name,
-                            track.Artists.Select(a => new Artist(a.Id, a.Name, System.Array.Empty<string>())).ToArray(),
-                            new Album(track.Album.Name, track.Album.Images.Select(i => i.Url).ToArray(), string.Empty),
-                            track.DurationMs,
-                            new Uri(track.Uri)),
-                    });
-
-                    if (this.RemainingInQueue > 0)
-                    {
-                        await this.StopAsync();
-                    }
-
-                    break;
-                case PlaybackState.Stopped:
-                case PlaybackState.Ended:
-                    TryInvokePlaybackEnded();
-
-                    if (this._queue.Any())
-                    {
-                        await this.NextAsync();
-                    }
-
-                    break;
-                default:
-                    throw new NotSupportedException();
+                await this.StopAsync();
             }
         }
-        catch (Exception ex)
+
+        async void PlayerStoppedOrEndedSubscribeHandler(FullTrack? _)
         {
-            this._logger.LogError(ex, "An error occurred during track info gathering");
+            TryInvokePlaybackEnded();
+
+            if (this._queue.Any())
+            {
+                await this.NextAsync();
+            }
         }
 
-        async Task<(FullTrack? TrackAudio, PlaybackState State)> IsCurrentPlaybackEndedAsync()
+        async Task<(FullTrack? TrackAudio, PlaybackState State)> GetPlayerInfoAsync()
         {
-            var playingContext = await this._client.Player.GetCurrentPlayback();
-
-            if (playingContext == null!)
+            try
             {
-                return (default, PlaybackState.Stopped);
-            }
+                var playingContext = await this._client.Player.GetCurrentPlayback();
 
-            if (playingContext.Item is not FullTrack currentTrack)
+                if (playingContext == null!)
+                {
+                    return (default, PlaybackState.Stopped);
+                }
+
+                if (playingContext.Item is not FullTrack currentTrack)
+                {
+                    return (default, PlaybackState.Stopped);
+                }
+
+                var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs - 1;
+                var trackStopped = playingContext is { IsPlaying: false, ProgressMs: 0 };
+
+                var playbackState =
+                    trackEnded ? PlaybackState.Ended :
+                    trackStopped ? PlaybackState.Stopped :
+                    PlaybackState.Playing;
+
+                return (currentTrack, playbackState);
+            }
+            catch
             {
-                return (default, PlaybackState.Stopped);
+                return (null, PlaybackState.Unknown);
             }
-
-            var trackEnded = playingContext.ProgressMs >= currentTrack.DurationMs - 1;
-            var trackStopped = playingContext is { IsPlaying: false, ProgressMs: 0 };
-
-            var playbackState =
-                trackEnded ? PlaybackState.Ended :
-                trackStopped ? PlaybackState.Stopped :
-                PlaybackState.Playing;
-
-            return (currentTrack, playbackState);
         }
 
         void TryInvokePlaybackEnded()
@@ -374,13 +385,14 @@ public class SpotifyProvider : IMusicProvider
             return;
         }
 
-        this._timer.Dispose();
+        this._disposer();
 
         this._disposed = true;
     }
 
     public void Dispose()
     {
-        _timer.Dispose();
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
     }
 }
