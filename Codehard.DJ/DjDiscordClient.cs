@@ -312,7 +312,8 @@ public partial class DjCommandModule : ApplicationCommandModule
     }
 
     [SlashCommand("q", "Queue the music using query text")]
-    public Task QueueMusicAsync(InteractionContext ctx,
+    public Task QueueMusicAsync(
+        InteractionContext ctx,
         [Option("queryText", "Query text to search for music to place in queue."), RemainingText]
         string queryText)
     {
@@ -337,18 +338,6 @@ public partial class DjCommandModule : ApplicationCommandModule
             await this._musicProvider.EnqueueAsync(music);
 
             await ReactAsync(context, Emojis.ThumbsUp, true);
-
-            member.AddTrack(
-                music.Id,
-                music.Title,
-                music.Artists.Select(a => a.Name),
-                music.Album.Name,
-                music.PlaySourceUri,
-                await this.CheckIfInappropriateAsync(music),
-                music.Artists.SelectMany(a => a.Genres));
-
-            await this._memberRepository.UpdateAsync(member);
-            await this._memberRepository.SaveChangesAsync();
 
             var queue = await this._musicProvider.GetCurrentQueueAsync();
 
@@ -416,18 +405,6 @@ public partial class DjCommandModule : ApplicationCommandModule
                 await this._musicProvider.EnqueueAsync(music);
                 await ReactAsync(client, channel, discordUser, Emojis.ThumbsUp);
 
-                member.AddTrack(
-                    music.Id,
-                    music.Title,
-                    music.Artists.Select(a => a.Name),
-                    music.Album.Name,
-                    music.PlaySourceUri,
-                    await this.CheckIfInappropriateAsync(music),
-                    music.Artists.SelectMany(a => a.Genres));
-
-                await this._memberRepository.UpdateAsync(member);
-                await this._memberRepository.SaveChangesAsync();
-
                 var queue = await this._musicProvider.GetCurrentQueueAsync();
 
                 var prevs = queue.TakeLast(3).ToArray();
@@ -474,7 +451,8 @@ public partial class DjCommandModule : ApplicationCommandModule
                     "You are an expert in languages, and can tell if a word is considered rude or inappropriate, you always answer with true or false only and nothing else."),
                 new("user", "Is the word bitch contains some word considered rude or inappropriate?"),
                 new("assistant", "true"),
-                new("user", $"Is {music} contains some word considered rude or inappropriate? You may only answer with true or false only."),
+                new("user",
+                    $"Is {music} contains some word considered rude or inappropriate? You may only answer with true or false only."),
             });
 
             var result = await this._api.ChatEndpoint.GetCompletionAsync(chatRequest);
@@ -558,54 +536,6 @@ public partial class DjCommandModule : ApplicationCommandModule
         await ctx.CreateResponseAsync(embeds);
     }
 
-    [SlashCommand("stat", "Display listening statistics.")]
-    public async Task GetStatAsync(InteractionContext ctx)
-    {
-        var member = await GetMemberAsync(ctx);
-
-        if (member == null)
-        {
-            await ReactAsync(ctx, Emojis.ThumbsDown);
-
-            return;
-        }
-
-        var playedTracks = member.PlayedTracks;
-
-        if (!playedTracks.Any())
-        {
-            await ctx.CreateResponseAsync("There is no history so far, try queueing one!");
-
-            return;
-        }
-
-        var mostPlayedGenre =
-            playedTracks.SelectMany(t => t.Genres).GroupBy(g => g).MaxBy(g => g.Count())?.Key;
-        var mostPlayedArtist =
-            playedTracks.SelectMany(t => t.Artists).GroupBy(a => a).MaxBy(g => g.Count())?.Key;
-        var totalPlayedTracks = playedTracks.Count;
-        var totalPlayedDays =
-            playedTracks.GroupBy(t => new { t.CreatedAt.Day, t.CreatedAt.Month, t.CreatedAt.Year })
-                .Select(g => g.Key)
-                .Count();
-        var averagePlayedPerDay = playedTracks.Count / totalPlayedDays;
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"🎵 Most played genre: {mostPlayedGenre ?? "Unknown"}");
-        sb.AppendLine($"🎵 Most played artist: {mostPlayedArtist ?? "Unknown"}");
-        sb.AppendLine($"🎵 Total requested tracks: {totalPlayedTracks}");
-        sb.AppendLine($"🎵 Average requested track per day: {averagePlayedPerDay}");
-
-        var embed = new DiscordEmbedBuilder
-        {
-            Title = "Here's some insight for you",
-            Description = sb.ToString(),
-            Color = new Optional<DiscordColor>(DiscordColor.Purple),
-        };
-
-        await ctx.CreateResponseAsync(embed, true);
-    }
-
     [SlashCommand("mute", "Mute the music.")]
     public async Task MuteAsync(InteractionContext ctx)
     {
@@ -632,7 +562,8 @@ public partial class DjCommandModule : ApplicationCommandModule
 
     [SlashCommand("ban", "Ban a user from accessing bot.")]
     [RequireUserPermissions(Permissions.Administrator)]
-    public async Task BanUserAsync(InteractionContext ctx,
+    public async Task BanUserAsync(
+        InteractionContext ctx,
         [Option("mentionText", "A user mention text.")]
         string mentionText,
         [Option("banMinute", "Ban duration in minute.")]
@@ -659,7 +590,8 @@ public partial class DjCommandModule : ApplicationCommandModule
 
     [SlashCommand("unban", "Unban.")]
     [RequireUserPermissions(Permissions.Administrator)]
-    public async Task UnbanUserAsync(InteractionContext ctx,
+    public async Task UnbanUserAsync(
+        InteractionContext ctx,
         [Option("mentionText", "A user mention text.")]
         string mentionText)
     {
@@ -689,7 +621,8 @@ public partial class DjCommandModule : ApplicationCommandModule
             var chatRequest = new ChatRequest(new ChatPrompt[]
             {
                 new("system", "You are a music expert and able to answer any question related to music."),
-                new ("system", "When user asking some question without a context given, you usually answer with a recommended music in format of  Music_Name from Album_Name of Artist_Name"),
+                new("system",
+                    "When user asking some question without a context given, you usually answer with a recommended music in format of  Music_Name from Album_Name of Artist_Name"),
                 new("user", "What's a good song about the hammer?"),
                 new("assistant", "Maxwell's Silver Hammer from Abbey Road by The Beatles"),
                 new("user", query),
