@@ -12,7 +12,7 @@
         <PackageReference Include="Codehard.Functional" Version="2.4.0" />
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="7.0.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.0" />
-        <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.0.0" />
+        <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.1.1" />
         <PackageReference Include="System.Runtime.Caching" Version="7.0.0" />
         <PackageReference Include="OpenAI-DotNet" Version="5.1.0" />
     </ItemGroup>

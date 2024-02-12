@@ -184,7 +184,7 @@ public class SpotifyProvider : IMusicProvider
                         p => p.Owner.DisplayName == "Spotify" && p.Name == discoverWeeklySearch)
                     .Bind(opt =>
                         opt.Match(SuccessEff,
-                            () => FailEff<SimplePlaylist>(Error.New(0, "No item available to play"))))
+                            () => FailEff<FullPlaylist>(Error.New(0, "No item available to play"))))
             from playlistTracks in
                 this._client.Playlists.GetItems(playlist.Id, cancellationToken)
                     .ToAff()
