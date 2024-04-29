@@ -32,10 +32,11 @@ builder.ConfigureServices((context, services) =>
 
     var spotifyConfig = configSection.GetSection("Spotify");
 
-    var clientId = spotifyConfig["ClientId"];
-    var clientSecret = spotifyConfig["ClientSecret"];
+    var callbackUri = spotifyConfig["CallbackUri"]!;
+    var clientId = spotifyConfig["ClientId"]!;
+    var clientSecret = spotifyConfig["ClientSecret"]!;
 
-    var spotifyClient = Bootstrap.InitializeSpotifyClientAsync(clientId!, clientSecret!).Result;
+    var spotifyClient = Bootstrap.InitializeSpotifyClientAsync(new Uri(callbackUri), clientId, clientSecret).Result;
 
     services.TryAddSingleton(spotifyClient);
     services.TryAddSingleton<IMusicProvider, SpotifyProvider>();

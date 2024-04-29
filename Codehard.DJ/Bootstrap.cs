@@ -9,12 +9,11 @@ namespace Codehard.DJ;
 public static class Bootstrap
 {
     public static async Task<SpotifyClient> InitializeSpotifyClientAsync(
+        Uri callbackUri,
         string clientId,
         string clientSecret,
         CancellationToken cancellationToken = default)
     {
-        var callbackUri = new Uri("http://localhost:8800/callback");
-
         var server = new EmbedIOAuthServer(callbackUri, 8800);
 
         await server.Start();
@@ -23,20 +22,28 @@ public static class Bootstrap
 
         server.AuthorizationCodeReceived += async (sender, response) =>
         {
-            var server = (EmbedIOAuthServer)sender;
+            try
+            {
+                var server = (EmbedIOAuthServer)sender;
 
-            await server.Stop();
+                await server.Stop();
 
-            var tokenResponse = await new OAuthClient()
-                .RequestToken(
-                    new AuthorizationCodeTokenRequest(clientId, clientSecret, response.Code, callbackUri),
-                    cancellationToken);
+                var tokenResponse = await new OAuthClient()
+                    .RequestToken(
+                        new AuthorizationCodeTokenRequest(clientId, clientSecret, response.Code, callbackUri),
+                        cancellationToken);
 
-            var config = SpotifyClientConfig
-                .CreateDefault()
-                .WithAuthenticator(new AuthorizationCodeAuthenticator(clientId, clientSecret, tokenResponse));
+                var config = SpotifyClientConfig
+                    .CreateDefault()
+                    .WithAuthenticator(new AuthorizationCodeAuthenticator(clientId, clientSecret, tokenResponse));
 
-            client = new SpotifyClient(config);
+                client = new SpotifyClient(config);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         };
 
         server.ErrorReceived += async (sender, error, state) =>
@@ -92,10 +99,15 @@ public static class Bootstrap
 
                 throw;
             }
+            catch (Exception ex)
+            {
+                throw;
+            }
         }
 
         static bool IsRunningInDocker()
         {
+            return true;
             string value = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER");
             return !string.IsNullOrEmpty(value) && value.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
